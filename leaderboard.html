@@ -1,0 +1,276 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>🏈 College Football Pick'em Leaderboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; background: #f4f4f4; padding: 20px; }
+    table { border-collapse: collapse; width: 100%; margin: 20px 0; }
+    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+    th { background: #4CAF50; color: white; }
+    .hit { background: #4CAF50; color: white; }
+    .miss { background: #F44336; color: white; }
+    select { padding: 8px; font-size: 16px; margin: 10px 0; }
+    canvas { max-width: 800px; margin: 20px auto; display: block; }
+  </style>
+</head>
+<body>
+  <h1>🏈 Week 1 Pick'em Leaderboard (Auto-Updates Every 60s) 🏈</h1>
+  <h2>Current Standings (Thurs/Fri + Saturday Live)</h2>
+  <canvas id="leaderboardChart"></canvas>
+  <table id="standingsTable">
+    <tr><th>Username</th><th>Thurs (6)</th><th>Fri (4)</th><th>Sat (11)</th><th>Total</th></tr>
+  </table>
+  <h2>Saturday Games (Live Scores/Status)</h2>
+  <table id="gamesTable">
+    <tr><th>Game</th><th>Spread</th><th>Status</th><th>Score</th><th>Covered By</th></tr>
+  </table>
+  <h2>User Picks by Day</h2>
+  <select id="daySelect" onchange="renderPicksTable()">
+    <option value="Thurs">Thursday 08/28</option>
+    <option value="Fri">Friday 08/29</option>
+    <option value="Sat" selected>Saturday 08/30</option>
+  </select>
+  <table id="picksTable"></table>
+
+  <script>
+    // Hardcoded Thurs/Fri scores and correct picks
+    const users = [
+      { username: 'scire.ben@gmail.com', thurs: 5, fri: 4, sat: 0, satGames: [] },
+      { username: 'samuel.lehman3337@gmail.com', thurs: 4, fri: 3, sat: 0, satGames: [] },
+      { username: 'aidan.burns257@gmail.com', thurs: 3, fri: 3, sat: 0, satGames: [] },
+      { username: 'goodnoughdylan@gmail.com', thurs: 3, fri: 3, sat: 0, satGames: [] },
+      { username: 'jakelehman100@gmail.com', thurs: 5, fri: 1, sat: 0, satGames: [] },
+      { username: 'timjbohlman@gmail.com', thurs: 4, fri: 0, sat: 0, satGames: [] },
+      { username: 'hankrudden@yahoo.com', thurs: 2, fri: 0, sat: 0, satGames: [] },
+      { username: 'max1solov@gmail.com', thurs: 1, fri: 1, sat: 0, satGames: [] }
+    ];
+
+    const correctPicks = {
+      Thurs: {
+        '#25 Boise State -5.5 @ South Florida': 'South Florida',
+        'Nebraska -6.5 @ Cincinnati': 'Cincinatti',
+        'Wyoming -5.5 @ Akron': 'Wyoming',
+        'Buffalo +17.5 @ Minnesota ': 'Buffalo',
+        'SF Austin +22.5 @ Houston': 'Houston',
+        'Miami of Ohio +18.5 @ Wisconsin': 'Miami of Ohio'
+      },
+      Fri: {
+        'Appalachian State -3.5 vs. Charlotte (at Bank of America Stadium)': 'Appalachian State',
+        'Georgia Tech -4.5 @ Colorado': 'Georgia Tech',
+        'Auburn -2.5 @ Baylor': 'Auburn',
+        'Central Michigan +13.5 @ San Jose State': 'Central Michigan'
+      }
+    };
+
+    // Saturday games with spreads (from CSV)
+    const games = [
+      { name: 'Ball St +17.5 @ Purdue', away: 'Ball State', home: 'Purdue', spread: 17.5 },
+      { name: 'Texas +1.5 @ OSU', away: 'Texas', home: 'Ohio State', spread: 1.5 },
+      { name: 'Syracuse +13.5 @ Tenn', away: 'Syracuse', home: 'Tennessee', spread: 13.5 },
+      { name: 'NW +4.5 @ Tulane', away: 'Northwestern', home: 'Tulane', spread: 4.5 },
+      { name: 'Ala -14.5 @ FSU', away: 'Alabama', home: 'Florida State', spread: -14.5 },
+      { name: 'LSU +4.5 @ Clemson', away: 'LSU', home: 'Clemson', spread: 4.5 },
+      { name: 'ODU +24.5 @ Indiana', away: 'Old Dominion', home: 'Indiana', spread: 24.5 },
+      { name: 'Ga Southern +1.5 @ Fresno St', away: 'Georgia Southern', home: 'Fresno State', spread: 1.5 },
+      { name: 'Cal +1.5 @ Oregon St', away: 'California', home: 'Oregon State', spread: 1.5 },
+      { name: 'Hawai\'i +16.5 @ Ariz', away: 'Hawai\'i', home: 'Arizona', spread: 16.5 },
+      { name: 'Utah -5.5 @ UCLA', away: 'Utah', home: 'UCLA', spread: -5.5 }
+    ];
+
+    // User picks (Thurs/Fri from CSVs, Sat from provided CSV)
+    const userPicks = {
+      'Thurs': {
+        'scire.ben@gmail.com': ['South Florida', 'Cincinatti', 'Akron', 'Buffalo', 'Houston', 'Miami of Ohio'],
+        'samuel.lehman3337@gmail.com': ['Boise State', 'Cincinatti', 'Wyoming', 'Buffalo', 'Houston', 'Wisconsin'],
+        'aidan.burns257@gmail.com': ['Boise State', 'Cincinatti', 'Wyoming', 'Minnesota', 'Houston', 'Wisconsin'],
+        'goodnoughdylan@gmail.com': ['South Florida', 'Nebraska', 'Wyoming', 'Minnesota', 'Houston', 'Wisconsin'],
+        'jakelehman100@gmail.com': ['South Florida', 'Cincinatti', 'Wyoming', 'Minnesota', 'Houston', 'Miami of Ohio'],
+        'timjbohlman@gmail.com': ['South Florida', 'Cincinatti', 'Akron', 'Buffalo', 'Houston', 'Wisconsin'],
+        'hankrudden@yahoo.com': ['Boise State', 'Nebraska', 'Wyoming', 'Minnesota', 'Houston', 'Wisconsin'],
+        'max1solov@gmail.com': ['Boise State', 'Nebraska', 'Akron', 'Minnesota', 'SF Austin', 'Miami of Ohio']
+      },
+      'Fri': {
+        'scire.ben@gmail.com': ['Appalachian State', 'Georgia Tech', 'Auburn', 'Central Michigan'],
+        'samuel.lehman3337@gmail.com': ['Appalachian State', 'Colorado', 'Auburn', 'Central Michigan'],
+        'aidan.burns257@gmail.com': ['Appalachian State', 'Georgia Tech', 'Baylor', 'Central Michigan'],
+        'goodnoughdylan@gmail.com': ['Appalachian State', 'Georgia Tech', 'Auburn', 'San Jose State'],
+        'jakelehman100@gmail.com': ['Charlotte', 'Colorado', 'Auburn', 'San Jose State'],
+        'timjbohlman@gmail.com': ['Charlotte', 'Colorado', 'Baylor', 'San Jose State'],
+        'hankrudden@yahoo.com': ['Charlotte', 'Colorado', 'Baylor', 'San Jose State'],
+        'max1solov@gmail.com': ['Charlotte', 'Colorado', 'Baylor', 'Central Michigan']
+      },
+      'Sat': {
+        'scire.ben@gmail.com': ['Purdue', 'Texas', 'Syracuse', 'Tulane', 'Alabama', 'LSU', 'Indiana', 'Georgia Southern', 'California', 'Arizona', 'Utah'],
+        'samuel.lehman3337@gmail.com': ['Purdue', 'Texas', 'Tennessee', 'Tulane', 'Alabama', 'Clemson', 'Indiana', 'Fresno State', 'California', 'Arizona', 'UCLA'],
+        'aidan.burns257@gmail.com': ['Ball State', 'Texas', 'Tennessee', 'Tulane', 'Alabama', 'LSU', 'Indiana', 'Georgia Southern', 'California', 'Hawai\'i', 'UCLA'],
+        'goodnoughdylan@gmail.com': ['Purdue', 'Texas', 'Syracuse', 'Tulane', 'Alabama', 'LSU', 'Old Dominion', 'Georgia Southern', 'Oregon State', 'Hawai\'i', 'Utah'],
+        'jakelehman100@gmail.com': ['Purdue', 'Ohio State', 'Syracuse', 'Northwestern', 'Florida State', 'Clemson', 'Old Dominion', 'Fresno State', 'California', 'Arizona', 'UCLA'],
+        'timjbohlman@gmail.com': ['Ball State', 'Ohio State', 'Syracuse', 'Northwestern', 'Alabama', 'Clemson', 'Indiana', 'Georgia Southern', 'Oregon State', 'Hawai\'i', 'UCLA'],
+        'hankrudden@yahoo.com': ['Ball State', 'Texas', 'Tennessee', 'Tulane', 'Florida State', 'LSU', 'Indiana', 'Fresno State', 'Oregon State', 'Arizona', 'UCLA'],
+        'max1solov@gmail.com': ['Ball State', 'Ohio State', 'Tennessee', 'Tulane', 'Florida State', 'LSU', 'Indiana', 'Fresno State', 'Oregon State', 'Arizona', 'UCLA']
+      }
+    };
+
+    let chart;
+    function updateLeaderboard() {
+      fetch('http://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?dates=20250830')
+        .then(response => response.json())
+        .then(data => {
+          const events = data.events || [];
+          const finalResults = games.map((game, idx) => {
+            const event = events.find(e => e.competitions[0].competitors.some(c => c.team.displayName.includes(game.away)) && e.competitions[0].competitors.some(c => c.team.displayName.includes(game.home)));
+            const row = document.querySelectorAll('#gamesTable tr')[idx+1];
+            let covered = null;
+            if (event) {
+              const comp = event.competitions[0];
+              const awayTeam = comp.competitors.find(c => c.homeAway === 'away');
+              const homeTeam = comp.competitors.find(c => c.homeAway === 'home');
+              const status = event.status.type.name;
+              if (status === 'STATUS_SCHEDULED') {
+                const kickoff = new Date(event.date);
+                const options = { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'America/New_York' };
+                row.cells[2].textContent = kickoff.toLocaleTimeString('en-US', options) + ' EDT';
+              } else {
+                row.cells[2].textContent = status === 'STATUS_IN_PROGRESS' ? 'In Progress' : 'Final';
+              }
+              row.cells[3].textContent = `${awayTeam.team.abbreviation} ${awayTeam.score || 0} - ${homeTeam.team.abbreviation} ${homeTeam.score || 0}`;
+
+              if (status === 'STATUS_FINAL') {
+                const diff = parseInt(homeTeam.score) - parseInt(awayTeam.score);
+                covered = game.spread > 0 ? (diff < game.spread || diff < 0 ? game.away : game.home) : (diff > Math.abs(game.spread) ? game.away : game.home);
+                row.cells[4].textContent = covered;
+
+                users.forEach(user => {
+                  if (!user.satGames || !user.satGames[idx]) {
+                    user.satGames = user.satGames || [];
+                    user.satGames[idx] = userPicks['Sat'][user.username][idx] === covered ? 1 : 0;
+                    user.sat = user.satGames.reduce((sum, val) => sum + (val || 0), 0);
+                  }
+                });
+              } else {
+                row.cells[4].textContent = 'N/A';
+              }
+            } else {
+              row.cells[2].textContent = 'Not Found';
+              row.cells[3].textContent = '-';
+              row.cells[4].textContent = 'N/A';
+            }
+            return covered;
+          });
+
+          users.sort((a, b) => (b.thurs + b.fri + b.sat) - (a.thurs + a.fri + a.sat));
+          const standingsBody = users.map(u => `<tr><td>${u.username}</td><td>${u.thurs}</td><td>${u.fri}</td><td>${u.sat}</td><td>${u.thurs + u.fri + u.sat}</td></tr>`).join('');
+          document.getElementById('standingsTable').innerHTML = '<tr><th>Username</th><th>Thurs (6)</th><th>Fri (4)</th><th>Sat (11)</th><th>Total</th></tr>' + standingsBody;
+
+          if (chart) chart.destroy();
+          const ctx = document.getElementById('leaderboardChart').getContext('2d');
+          chart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+              labels: users.map(u => u.username + ' (' + (u.thurs + u.fri + u.sat) + ')'),
+              datasets: [
+                { label: 'Thurs', data: users.map(u => u.thurs), backgroundColor: '#4CAF50' },
+                { label: 'Fri', data: users.map(u => u.fri), backgroundColor: '#2196F3' },
+                { label: 'Sat', data: users.map(u => u.sat), backgroundColor: '#FF9800' }
+              ]
+            },
+            options: {
+              indexAxis: 'y',
+              scales: { x: { stacked: true, max: 21 }, y: { stacked: true } },
+              plugins: {
+                legend: { position: 'top' },
+                title: { display: true, text: '🏈 Week 1 Leaderboard 🏈', font: { size: 18 } }
+              }
+            }
+          });
+
+          renderPicksTable(finalResults);
+        })
+        .catch(err => console.error('API Error:', err));
+    }
+
+    function renderPicksTable(finalResults = []) {
+      const day = document.getElementById('daySelect').value;
+      let headers, body = '';
+      if (day === 'Thurs') {
+        headers = '<tr><th>Username</th>' + Object.keys(correctPicks.Thurs).map(g => `<th>${g}</th>`).join('') + '</tr>';
+        body = users.map(u => {
+          const picks = userPicks.Thurs[u.username];
+          return '<tr><td>' + u.username + '</td>' + picks.map((p, i) => {
+            const correct = correctPicks.Thurs[Object.keys(correctPicks.Thurs)[i]];
+            return `<td class="${p === correct ? 'hit' : 'miss'}">${p}</td>`;
+          }).join('') + '</tr>';
+        }).join('');
+      } else if (day === 'Fri') {
+        headers = '<tr><th>Username</th>' + Object.keys(correctPicks.Fri).map(g => `<th>${g}</th>`).join('') + '</tr>';
+        body = users.map(u => {
+          const picks = userPicks.Fri[u.username];
+          return '<tr><td>' + u.username + '</td>' + picks.map((p, i) => {
+            const correct = correctPicks.Fri[Object.keys(correctPicks.Fri)[i]];
+            return `<td class="${p === correct ? 'hit' : 'miss'}">${p}</td>`;
+          }).join('') + '</tr>';
+        }).join('');
+      } else {
+        headers = '<tr><th>Username</th>' + games.map(g => `<th>${g.name}</th>`).join('') + '</tr>';
+        body = users.map(u => {
+          const picks = userPicks.Sat[u.username];
+          return '<tr><td>' + u.username + '</td>' + picks.map((p, i) => {
+            const covered = finalResults[i];
+            return `<td class="${covered && p === covered ? 'hit' : covered ? 'miss' : ''}">${p || 'N/A'}</td>`;
+          }).join('') + '</tr>';
+        }).join('');
+      }
+      document.getElementById('picksTable').innerHTML = headers + body;
+    }
+
+    // Initial render
+    const gamesBody = games.map(g => `<tr><td>${g.name}</td><td>${g.spread > 0 ? g.away + ' +' + g.spread : g.away + ' ' + g.spread}</td><td>Loading...</td><td>Loading...</td><td>N/A</td></tr>`).join('');
+    document.getElementById('gamesTable').innerHTML = '<tr><th>Game</th><th>Spread</th><th>Status</th><th>Score</th><th>Covered By</th></tr>' + gamesBody;
+
+    renderPicksTable();
+    updateLeaderboard();
+    setInterval(updateLeaderboard, 60000);
+  </script>
+</body>
+</html>
