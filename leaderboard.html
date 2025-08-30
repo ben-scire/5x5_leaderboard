@@ -1,48 +1,9 @@
-<script type="text/javascript">
-        var gk_isXlsx = false;
-        var gk_xlsxFileLookup = {};
-        var gk_fileData = {};
-        function filledCell(cell) {
-          return cell !== '' && cell != null;
-        }
-        function loadFileData(filename) {
-        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
-            try {
-                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
-                var firstSheetName = workbook.SheetNames[0];
-                var worksheet = workbook.Sheets[firstSheetName];
-
-                // Convert sheet to JSON to filter blank rows
-                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
-                // Filter out blank rows (rows where all cells are empty, null, or undefined)
-                var filteredData = jsonData.filter(row => row.some(filledCell));
-
-                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
-                var headerRowIndex = filteredData.findIndex((row, index) =>
-                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
-                );
-                // Fallback
-                if (headerRowIndex === -1 || headerRowIndex > 25) {
-                  headerRowIndex = 0;
-                }
-
-                // Convert filtered JSON back to CSV
-                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
-                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
-                return csv;
-            } catch (e) {
-                console.error(e);
-                return "";
-            }
-        }
-        return gk_fileData[filename] || "";
-        }
-        </script><!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <title>🏈 College Football Pick'em Leaderboard</title>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
   <style>
     body { font-family: Arial, sans-serif; background: #f4f4f4; padding: 20px; }
     table { border-collapse: collapse; width: 100%; margin: 20px 0; }
@@ -52,10 +13,12 @@
     .miss { background: #F44336; color: white; }
     select { padding: 8px; font-size: 16px; margin: 10px 0; }
     canvas { max-width: 800px; margin: 20px auto; display: block; }
+    #errorMessage { color: red; display: none; }
   </style>
 </head>
 <body>
   <h1>🏈 Week 1 Pick'em Leaderboard (Auto-Updates Every 60s) 🏈</h1>
+  <div id="errorMessage">Error loading game data. Check console for details.</div>
   <h2>Current Standings (Thurs/Fri + Saturday Live)</h2>
   <canvas id="leaderboardChart"></canvas>
   <table id="standingsTable">
@@ -157,9 +120,10 @@
       fetch('http://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?dates=20250830')
         .then(response => response.json())
         .then(data => {
+          document.getElementById('errorMessage').style.display = 'none';
           const events = data.events || [];
           const finalResults = games.map((game, idx) => {
-            const event = events.find(e => e.competitions[0].competitors.some(c => c.team.displayName.includes(game.away)) && e.competitions[0].competitors.some(c => c.team.displayName.includes(game.home)));
+            const event = events.find(e => e.competitions[0].competitors.some(c => c.team.displayName.toLowerCase().includes(game.away.toLowerCase())) && e.competitions[0].competitors.some(c => c.team.displayName.toLowerCase().includes(game.home.toLowerCase())));
             const row = document.querySelectorAll('#gamesTable tr')[idx+1];
             let covered = null;
             if (event) {
@@ -195,6 +159,7 @@
               row.cells[2].textContent = 'Not Found';
               row.cells[3].textContent = '-';
               row.cells[4].textContent = 'N/A';
+              console.log(`Game not found: ${game.name}, away: ${game.away}, home: ${game.home}`);
             }
             return covered;
           });
@@ -227,7 +192,17 @@
 
           renderPicksTable(finalResults);
         })
-        .catch(err => console.error('API Error:', err));
+        .catch(err => {
+          console.error('API Error:', err);
+          document.getElementById('errorMessage').style.display = 'block';
+          document.getElementById('gamesTable').querySelectorAll('tr').forEach((row, idx) => {
+            if (idx > 0) {
+              row.cells[2].textContent = 'API Error';
+              row.cells[3].textContent = '-';
+              row.cells[4].textContent = 'N/A';
+            }
+          });
+        });
     }
 
     function renderPicksTable(finalResults = []) {
