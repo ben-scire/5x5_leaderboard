@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Submit Picks - 5x5</title>
+  <link rel="stylesheet" href="leaderboard.css" />
+</head>
+<body>
+  <div class="app-frame">
+    <h1 class="accented">Submit Your Picks</h1>
+    <div id="authPanel" class="card">
+      <h2>Login / Create Account</h2>
+      <div class="row"><label>Email <input type="email" id="email" autocomplete="username" required></label></div>
+      <div class="row"><label>Password <input type="password" id="password" autocomplete="current-password" required></label></div>
+      <div class="row small">If this is your first time: enter the passphrase you were given as the password to claim your account. Afterwards you can change it (feature forthcoming).</div>
+      <div class="row actions">
+        <button id="btnLogin">Login</button>
+        <button id="btnCreate" type="button">Create</button>
+        <span id="authStatus" class="status"></span>
+      </div>
+    </div>
+    <div id="picksPanel" class="card" style="display:none;">
+      <h2>Remaining Picks <span id="userLabel"></span></h2>
+      <div class="row small">Enter or edit any remaining (unlocked) picks below. Previously locked/graded picks are omitted.</div>
+      <div id="remainingWrap"></div>
+      <div class="row actions" style="margin-top:16px;">
+        <button id="btnSave" disabled>Save All</button>
+        <span id="saveStatus" class="status"></span>
+      </div>
+    </div>
+    <p><a href="leaderboard.html">Back to Leaderboard</a></p>
+  </div>
+  <script src="picks.js"></script>
+</body>
+</html>

@@ -1,6 +1,7 @@
 services:
   - type: web
     name: 5x5-coach
+    region: ohio  # Set desired region (US East). Recreate service to move regions.
     runtime: python
     plan: starter
     buildCommand: pip install -r requirements.txt

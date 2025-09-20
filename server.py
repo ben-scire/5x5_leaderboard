@@ -891,55 +891,146 @@ def _normalize_pick_value(raw: str):
     return s
 
 def _compute_current_scores():
-    """Compute per-user tally of correct picks given current schedule results.
-    Rules:
-      - For each pick definition with a non-empty result: compare user's stored pick value (normalized) to result (normalized).
-      - Empty user pick never scores.
-      - Result values expected forms:
-          SPREAD: TEAM ABBR of covering side
-          TOTAL: OVER / UNDER / PUSH
-          PROP: YES / NO / (optional PUSH)
-      - PUSH awards no point.
-      - Unknown result (blank) -> skip.
-    Returns: dict email -> { score:int, total:int }
+    """Compute per-user tally of correct picks with per-day breakdown.
+    Returns structure:
+      {
+        totalPossible: int,
+        dayOrder: [day,...],
+        entries: [ { email, score, answered, perDay: { day: { score, answered } } } ]
+      }
     """
     sched, _ = _load_schedule()
     all_picks = load_unified_picks()
-    scores = {}
     days = sched.get('days') or {}
-    for day, defn in days.items():
+    # Preserve a stable deterministic day order based on schedule 'order' then name
+    ordered_days = sorted(days.keys(), key=lambda d: (days[d].get('order', 0), d))
+    per_user = {}
+    for day in ordered_days:
+        defn = days[day]
         pick_defs = defn.get('picks') or []
         day_user_map = all_picks.get(day) or {}
         for email, rec in day_user_map.items():
             upicks = rec.get('picks') or []
-            # Ensure entry exists in scores
-            sc = scores.setdefault(email, { 'score': 0, 'answered': 0 })
+            entry = per_user.setdefault(email, { 'score':0, 'answered':0, 'perDay':{} })
+            dstat = entry['perDay'].setdefault(day, { 'score':0, 'answered':0 })
             for idx, pd in enumerate(pick_defs):
                 if idx >= len(upicks):
                     continue
                 result_val = _normalize_pick_value(pd.get('result') or '')
                 if not result_val or result_val == 'PUSH':
-                    continue  # not gradable yet
+                    continue
                 user_raw = _normalize_pick_value(upicks[idx])
                 if not user_raw:
                     continue
-                sc['answered'] += 1
+                dstat['answered'] += 1
+                entry['answered'] += 1
                 if user_raw == result_val:
-                    sc['score'] += 1
-    # Also compute max possible total picks (25) as configured by schedule length
+                    dstat['score'] += 1
+                    entry['score'] += 1
     total_picks = sum(len((defn or {}).get('picks') or []) for defn in days.values())
-    # Compose leaderboard list
     leaderboard = []
-    for email, rec in scores.items():
-        leaderboard.append({ 'email': email, 'score': rec['score'], 'answered': rec['answered'], 'totalPossible': total_picks })
-    # Sort by score desc, then answered asc (fewer attempts first), then email
+    for email, rec in per_user.items():
+        leaderboard.append({
+            'email': email,
+            'score': rec['score'],
+            'answered': rec['answered'],
+            'totalPossible': total_picks,
+            'perDay': rec['perDay']
+        })
     leaderboard.sort(key=lambda r: (-r['score'], r['answered'], r['email']))
-    return { 'totalPossible': total_picks, 'entries': leaderboard }
+    return { 'totalPossible': total_picks, 'entries': leaderboard, 'dayOrder': ordered_days }
 
 @app.route('/api/leaderboard')
 def api_leaderboard():
     data = _compute_current_scores()
     return jsonify({ 'ok': True, **data, 'generated': int(time.time()*1000) })
+
+
+############################
+# Admin submissions monitoring
+############################
+
+def _require_admin():
+    """Validate admin via standard bearer token auth.
+
+    Previous implementation attempted to parse the raw bearer token assuming a
+    'email:...' structure which does not match the signed token format
+    (base64(email|ts).hmacsig). We now simply reuse _auth_from_header and then
+    check the stored user admin flag for correctness.
+    Returns the admin email on success, else None.
+    """
+    email, err = _auth_from_header()
+    if err:
+        return None
+    users = _load_users()
+    rec = users.get(email) or {}
+    if not rec.get('admin') and email not in ADMINS:
+        return None
+    return email
+
+@app.route('/api/admin/submissions')
+def api_admin_submissions():
+    if not _require_admin():
+        return jsonify({ 'ok': False, 'error': 'forbidden' }), 403
+    sched, _ = _load_schedule()
+    picks = load_unified_picks()
+    out = {}
+    for day, dmap in (picks or {}).items():
+        day_list = []
+        for email, rec in (dmap or {}).items():
+            day_list.append({ 'email': email, 'count': len(rec.get('picks') or []), 'ts': rec.get('ts') })
+        out[day] = day_list
+    return jsonify({ 'ok': True, 'days': out, 'dayDefinitions': list((sched.get('days') or {}).keys()) })
+
+@app.route('/api/admin/day_picks')
+def api_admin_day_picks():
+    """Return full raw picks for a given day (all users) including lock flags & results.
+    Query: day=<DayName>
+    Only for admins. This directly surfaces users' selections for auditing.
+    """
+    admin_email = _require_admin()
+    if not admin_email:
+        return jsonify({ 'ok': False, 'error': 'forbidden' }), 403
+    day = (request.args.get('day') or '').strip()
+    if not day:
+        return jsonify({ 'ok': False, 'error': 'missing_day' }), 400
+    sched, _ = _load_schedule()
+    day_def = (sched.get('days') or {}).get(day)
+    if not day_def:
+        return jsonify({ 'ok': False, 'error': 'unknown_day' }), 404
+    pick_defs = day_def.get('picks') or []
+    locks = _pick_lock_matrix(day)
+    all_p = load_unified_picks()
+    day_map = all_p.get(day) or {}
+    # Build normalized structure: { email: { picks:[...], ts } }
+    out = {}
+    for email, rec in day_map.items():
+        out[email] = { 'picks': rec.get('picks') or [], 'ts': rec.get('ts') }
+    return jsonify({
+        'ok': True,
+        'admin': admin_email,
+        'day': day,
+        'definitions': [ { 'label': pd.get('label'), 'type': pd.get('type'), 'result': pd.get('result') } for pd in pick_defs ],
+        'locks': locks,
+        'entries': out,
+        'count': len(out)
+    })
+
+@app.route('/api/admin/all_picks')
+def api_admin_all_picks():
+    """Return all picks for all days for admins (raw). Useful for snapshotting.
+    Returns { ok, days: { Day: { email: { picks, ts } } }, scheduleVersion }
+    """
+    admin_email = _require_admin()
+    if not admin_email:
+        return jsonify({ 'ok': False, 'error': 'forbidden' }), 403
+    sched, ver = _load_schedule()
+    all_p = load_unified_picks()
+    # Shallow copy to avoid accidental mutation downstream
+    safe = {}
+    for day, dmap in (all_p or {}).items():
+        safe[day] = { email: { 'picks': rec.get('picks') or [], 'ts': rec.get('ts') } for email, rec in (dmap or {}).items() }
+    return jsonify({ 'ok': True, 'admin': admin_email, 'scheduleVersion': ver, 'days': safe })
 
 
 @app.route('/healthz')
