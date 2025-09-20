@@ -473,6 +473,7 @@ function updateScoreboard(){
 
   // If past completed day (Thurs/Fri) and we have static final results, render those (preferred over labels fallback)
   if((scoreboardDay==='Thurs' || scoreboardDay==='Fri') && (!games || !games.length) && finalResults[scoreboardDay]){
+    console.log('[Scoreboard] Using static finals for', scoreboardDay, 'games length=', games?games.length:0);
     const header = '<tr><th>Game</th><th>Final Score</th><th>Spread</th><th>Total</th></tr>';
     const rows = finalResults[scoreboardDay].map(fr=>{
       const scoreFrag = `${fr.awayScore}-${fr.homeScore}`;
@@ -502,6 +503,7 @@ function updateScoreboard(){
   }
   const header = '<tr><th>Game</th><th>Score / Status</th><th>Spread</th><th>Total</th></tr>';
   const rows = games.map((g,i)=>{
+    if(!games.length){ console.log('[Scoreboard] No games array for day', scoreboardDay); }
     const st = states && states[i] ? states[i] : null; if(st) st._idx = i; // attach index for statusDetail time lookup
     const live = st && st.status && st.status !== 'STATUS_SCHEDULED';
     const scoreFrag = live ? `${st.away}-${st.home}` : (times && times[i] ? times[i] : '');

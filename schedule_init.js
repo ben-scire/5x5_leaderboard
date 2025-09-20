@@ -7,7 +7,24 @@
     const resp = await fetch('/api/schedule');
     if(!resp.ok){ console.warn('[ScheduleInit] Failed schedule fetch', resp.status); return; }
     const payload = await resp.json();
-    const days = payload.days || {};
+    const rawDays = payload.days || {};
+    // Normalize incoming day keys (e.g., Friday, FRIDAY -> Fri) for robustness.
+    const days = {};
+    const mapDay = (k) => {
+      if(!k) return k;
+      const l = k.toLowerCase();
+      if(l.startsWith('thu')) return 'Thurs';
+      if(l.startsWith('fri')) return 'Fri';
+      if(l.startsWith('sat')) return 'Sat';
+      if(l.startsWith('sun')) return 'Sun';
+      if(l.startsWith('mon')) return 'Mon';
+      return k; // leave unknown keys unchanged
+    };
+    Object.keys(rawDays).forEach(k=>{
+      const mk = mapDay(k);
+      // Prefer explicit canonical key; if duplicate appears, last wins (CSV order)
+      days[mk] = rawDays[k];
+    });
     // Ensure global containers exist (from config.js)
     window.picksLabels = window.picksLabels || { Thurs:[], Fri:[], Sat:[], Sun:[], Mon:[] };
     window.userPicks = window.userPicks || { Thurs:{}, Fri:{}, Sat:{}, Sun:{}, Mon:{} };
@@ -55,6 +72,6 @@
       } catch(e){ console.warn('[ScheduleInit] public picks load failed', day, e); }
     }));
 
-    console.log('[ScheduleInit] Loaded schedule version', payload.version);
+    console.log('[ScheduleInit] Loaded schedule version', payload.version, 'days:', Object.keys(days));
   } catch(err){ console.warn('[ScheduleInit] Fatal error', err); }
 })();
