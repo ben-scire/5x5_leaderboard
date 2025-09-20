@@ -1,17 +1,128 @@
 // Dynamic live leaderboard + picks rendering using new unified backend APIs.
+// Non-invasive: leaves existing legacy static arrays untouched; if backend available,
+// replaces table/chart content. Falls back silently if API unreachable.
+
 (function(){
   const LB_API = '/api/leaderboard';
   const SCHED_API = '/api/schedule';
-  let schedule = null; let leaderboard = null; let currentDay = null;
+  const PICKS_API = '/api/picks/get'; // requires auth token for user picks (we only need public aggregated picks display?)
+  // For public leaderboard we only need /api/leaderboard plus schedule to show pick definitions & results.
+
+  let schedule = null; // loaded schedule
+  let leaderboard = null; // last leaderboard payload
+
   function $(id){ return document.getElementById(id); }
-  async function fetchJSON(url){ try{ const r=await fetch(url,{cache:'no-store'}); if(!r.ok) throw 0; return await r.json(); }catch(e){ return null; } }
-  function firstDay(days){ const keys=Object.keys(days||{}); if(!keys.length) return null; return keys.sort((a,b)=> (days[a].order||0)-(days[b].order||0))[0]; }
-  function buildDayToggle(days){ const bar=$('dayToggleBar'); if(!bar||bar.dataset.enhanced) return; bar.dataset.enhanced='1'; const ordered=Object.keys(days).sort((a,b)=> (days[a].order||0)-(days[b].order||0)); if(!currentDay) currentDay = firstDay(days); ordered.forEach(d=>{ const btn=document.createElement('button'); btn.textContent=d; btn.className='day-btn'; if(d===currentDay) btn.classList.add('active'); btn.onclick=()=>{ currentDay=d; [...bar.querySelectorAll('button')].forEach(b=>b.classList.toggle('active', b.textContent===d)); renderGamesTable(); renderLeaderboard(); }; bar.appendChild(btn); }); }
-  function renderGamesTable(){ const tbl=$('gamesTable'); if(!tbl||!schedule) return; if(!currentDay){ tbl.innerHTML='<tr><td style="padding:8px;color:#888;">No schedule loaded</td></tr>'; return; } const def=schedule.days[currentDay]; if(!def){ tbl.innerHTML='<tr><td style="padding:8px;color:#888;">No picks</td></tr>'; return; } const rows=['<tr><th>#</th><th>Pick</th><th>Result</th></tr>']; const games=def.games||[]; (def.picks||[]).forEach((p,i)=>{ const game=p.gameIndex!=null?games[p.gameIndex]:null; // use precomputed label from backend for consistency
-    const label = p.label || (game? `${game.awayAbbr} @ ${game.homeAbbr}` : 'Pick');
-    const res=(p.result||'').toUpperCase();
-    rows.push(`<tr><td>${i+1}</td><td>${label}</td><td class="res ${res?'has-res':''}">${res}</td></tr>`); }); tbl.innerHTML=rows.join(''); }
-  function renderLeaderboard(){ const tbl=$('leaderboardTable'); if(!tbl){ return;} if(!leaderboard){ tbl.innerHTML='<tr><td style="padding:8px;color:#888;">Loading...</td></tr>'; return;} const entries=leaderboard.entries||[]; if(!entries.length){ tbl.innerHTML='<tr><td style="padding:8px;color:#888;">No data</td></tr>'; return;} const dayOrder=leaderboard.dayOrder||[]; const head=`<tr><th>Rank</th><th>Player</th>${dayOrder.map(d=>`<th>${d}</th>`).join('')}<th>Total</th><th>Ans</th><th>Tot</th></tr>`; const body=entries.map((e,i)=>{ const nick=(window.nicknameMap&&window.nicknameMap[e.email])||e.email.split('@')[0]; const per=dayOrder.map(d=>{ const st=e.perDay&&e.perDay[d]; return `<td>${st? st.score:0}<span class="sub">/${(st&&st.answered)||0}</span></td>`; }).join(''); return `<tr><td>${i+1}</td><td>${nick}</td>${per}<td>${e.score}</td><td>${e.answered}</td><td>${leaderboard.totalPossible}</td></tr>`; }).join(''); tbl.innerHTML=head+body; }
-  async function refresh(){ if(!schedule){ const s=await fetchJSON(SCHED_API); if(s&&s.ok){ schedule=s.schedule||s; buildDayToggle(schedule.days||{}); renderGamesTable(); }} const lb=await fetchJSON(LB_API); if(lb&&lb.ok) leaderboard=lb; renderLeaderboard(); }
-  setInterval(refresh,20000); refresh();
+
+  async function fetchJSON(url){
+    try {
+      const res = await fetch(url, { cache:'no-store' });
+      if(!res.ok) throw new Error(res.status+' '+res.statusText);
+      return await res.json();
+    } catch(e){
+      console.warn('[live] fetch failed', url, e); return null;
+    }
+  }
+
+  function buildDayToggle(days){
+    const bar = $('dayToggleBar'); if(!bar) return;
+    if(bar.dataset.enhanced) return; // run once
+    bar.dataset.enhanced='1';
+    const ordered = Object.keys(days).sort((a,b)=> days[a].order - days[b].order);
+    ordered.forEach(d=>{
+      const btn = document.createElement('button');
+      btn.textContent = d;
+      btn.className = 'day-btn';
+      btn.addEventListener('click', ()=>{
+        currentDay = d; // reuse global consumed by legacy code
+        renderGamesTable();
+        renderLeaderboardChart();
+      });
+      bar.appendChild(btn);
+    });
+  }
+
+  function normalizeResult(res){
+    if(!res) return '';
+    const u = res.toUpperCase();
+    if(['OVER','UNDER','YES','NO','PUSH'].includes(u)) return u;
+    return res; // team abbr or name
+  }
+
+  function renderGamesTable(){
+    const tbl = $('gamesTable'); if(!tbl || !schedule) return;
+    const dayDef = schedule.days[currentDay];
+    if(!dayDef){ tbl.innerHTML='<tr><td style="padding:8px;color:#888;">No picks for '+currentDay+'</td></tr>'; return; }
+    const picks = dayDef.picks || [];
+    const rows = [];
+    rows.push('<tr><th>#</th><th>Definition</th><th>Result</th></tr>');
+    picks.forEach((p,i)=>{
+      const type = p.type; // SPREAD | TOTAL | PROP
+      let label='';
+      if(type === 'SPREAD'){
+        // Home-based line: negative => home favored
+        const ln = p.lineHome;
+        const disp = ln === 0 ? 'PK' : (ln>0? '+'+ln : ln);
+        label = `${p.awayAbbr || p.away} @ ${p.homeAbbr || p.home} ${disp}`;
+      } else if(type === 'TOTAL'){
+        label = `O/U ${p.total}`;
+      } else if(type === 'PROP'){
+        label = p.propLabel || 'Prop';
+      }
+      const result = normalizeResult(p.result);
+      rows.push(`<tr><td>${i+1}</td><td>${label}</td><td class="res ${result? 'has-res':''}">${result||''}</td></tr>`);
+    });
+    tbl.innerHTML = rows.join('');
+  }
+
+  function renderLeaderboardChart(){
+    const tbl = $('leaderboardTable'); if(!tbl) return;
+    if(!leaderboard){ tbl.innerHTML = '<tr><td style="padding:8px;color:#888;">Loading leaderboard...</td></tr>'; return; }
+    const entries = leaderboard.entries || [];
+    if(!entries.length){ tbl.innerHTML = '<tr><td style="padding:8px;color:#888;">No graded picks yet.</td></tr>'; return; }
+    const dayOrder = leaderboard.dayOrder || [];
+    const dayHead = dayOrder.map(d=>`<th>${d}</th>`).join('');
+    const header = `<tr><th>Rank</th><th>Player</th>${dayHead}<th>Total</th><th>Ans</th><th>Tot</th></tr>`;
+    const body = entries.map((e,i)=>{
+      const email = e.email;
+      const nick = (window.nicknameMap && window.nicknameMap[email]) || (email.split('@')[0]);
+      const perDayCells = dayOrder.map(d=>{
+        const st = (e.perDay && e.perDay[d]) || {score:0,answered:0};
+        // Show score (answered) for clarity
+        return `<td>${st.score}<span class="sub">/${st.answered||0}</span></td>`;
+      }).join('');
+      return `<tr><td>${i+1}</td><td>${nick}</td>${perDayCells}<td>${e.score}</td><td>${e.answered}</td><td>${leaderboard.totalPossible}</td></tr>`;
+    }).join('');
+    tbl.innerHTML = header + body;
+  }
+
+  async function refresh(){
+    if(!schedule){ schedule = await fetchJSON(SCHED_API); if(schedule && schedule.ok){ schedule = schedule.schedule || schedule; buildDayToggle(schedule.days||{}); renderGamesTable(); } }
+    leaderboard = await fetchJSON(LB_API) || leaderboard;
+    renderLeaderboardChart();
+  }
+
+  // Kick off periodic refresh (more frequent early in game windows)
+  setInterval(refresh, 20000); // 20s
+  refresh();
+
+  // Optional admin submissions monitor (adds a small fetch link if user is admin after they manually set a token in localStorage)
+  (function(){
+    const linkId='adminSubmissionsLink';
+    if(document.getElementById(linkId)) return;
+    const nav = document.querySelector('.site-header .header-inner');
+    if(!nav) return;
+    const a=document.createElement('a'); a.id=linkId; a.textContent='Submissions JSON'; a.style.fontSize='11px'; a.style.marginLeft='12px'; a.href='#';
+    a.addEventListener('click', async (e)=>{
+      e.preventDefault();
+      const token = localStorage.getItem('authToken');
+      if(!token){ alert('Store admin token in localStorage.authToken first (login on picks page).'); return; }
+      try {
+        const r = await fetch('/api/admin/submissions',{ headers:{Authorization:'Bearer '+token} });
+        const j = await r.json();
+        console.log('[Admin submissions]', j);
+        alert(j.ok? 'Submissions data logged to console.' : ('Error: '+j.error));
+      } catch(err){ alert('Fetch error'); }
+    });
+    nav.appendChild(a);
+  })();
 })();

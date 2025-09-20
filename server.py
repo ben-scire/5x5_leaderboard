@@ -1081,6 +1081,19 @@ def healthz():
 def root():
     return send_from_directory('.', 'leaderboard.html')
 
+# Explicit static routes for key frontend pages & basic health check
+@app.route('/leaderboard.html')
+def leaderboard_page():
+    return send_from_directory(APP_ROOT, 'leaderboard.html')
+
+@app.route('/picks.html')
+def picks_page():
+    return send_from_directory(APP_ROOT, 'picks.html')
+
+@app.route('/healthz')
+def healthz():
+    return jsonify({ 'ok': True, 'version': _SCHEDULE_CACHE.get('version'), 'ts': _SCHEDULE_CACHE.get('ts') })
+
 
 if __name__ == '__main__':
     ensure_preseed()

@@ -14,14 +14,14 @@
 <body>
   <div class="app-frame">
   <div class="site-header">
-.sp-blur{filter:blur(3px);pointer-events:none;}
     <div class="header-inner">
   <div class="site-title">5x5 Pick 'em Week 3</div>
-  <div class="subtitle">Brought to you by Hank&amp;Jake Operations and TS^2G</div>
+  <div class="subtitle">Coach H&amp;Jake Coaching Co. and TS^2G</div>
   <img src="SSG-white.png" alt="The Scire Scoring Group Logo" class="tsg-logo" onerror="this.removeAttribute('onerror');this.style.opacity='0';setTimeout(()=>{this.src='SSG-white.png';this.style.opacity='1';},300);" />
     </div>
   </div>
   <div class="header-divider"></div>
+  <div style="padding:8px 12px;font-size:13px;"><a href="picks.html" style="color:#4fc3f7;">Submit / Edit Your Picks</a></div>
   <!-- removed live data fetch error text -->
 
   <!-- Leaderboard now primary focus -->
@@ -58,56 +58,21 @@
       <table id="picksTable"></table>
     </div>
   </div>
-
-  <!-- Auth & Dynamic Picks Submission Panel -->
-  <section id="authSection" class="auth-section" style="margin-top:32px;">
-    <h2 class="accented" style="display:flex;align-items:center;gap:12px;">Account / Picks
-      <span id="authStatus" style="font-size:0.65em;font-weight:400;color:#888;">Not signed in</span>
-    </h2>
-    <div id="authForms" class="auth-forms" style="display:flex;flex-wrap:wrap;gap:18px;align-items:flex-start;">
-      <form id="createAccountForm" class="mini-card" style="min-width:260px;">
-        <h3>Create Account</h3>
-        <label>Email<br><input type="email" name="email" required autocomplete="username"></label>
-        <label>Password<br><input type="password" name="password" required minlength="6" autocomplete="new-password"></label>
-        <button type="submit">Create</button>
-        <div class="form-msg" data-role="msg"></div>
-      </form>
-      <form id="loginForm" class="mini-card" style="min-width:260px;">
-        <h3>Login</h3>
-        <label>Email<br><input type="email" name="email" required autocomplete="username"></label>
-        <label>Password<br><input type="password" name="password" required autocomplete="current-password"></label>
-        <button type="submit">Login</button>
-        <div class="form-msg" data-role="msg"></div>
-      </form>
-      <div id="accountInfo" class="mini-card" style="display:none;min-width:240px;">
-        <h3>Account</h3>
-        <p id="accountEmail" style="margin:4px 0 8px;font-weight:600;"></p>
-        <button id="logoutBtn" type="button">Logout</button>
-        <div style="margin-top:12px;font-size:0.8em;color:#666;">Your token persists for 7 days or until logout.</div>
-      </div>
-    </div>
-    <div id="dynamicPicksPanel" style="margin-top:28px;display:none;">
-      <h3 style="margin:0 0 12px;">Your Daily Picks</h3>
-      <div id="dayPickerButtons" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;"></div>
-      <form id="dayPicksForm" class="mini-card" style="max-width:720px;">
-        <div id="dayPicksFields" style="display:grid;gap:10px;"></div>
-        <div style="display:flex;align-items:center;gap:12px;margin-top:14px;">
-          <button type="submit" id="savePicksBtn">Save Picks</button>
-          <span id="saveStatus" style="font-size:0.8em;color:#888;"></span>
-        </div>
-      </form>
-    </div>
-  </section>
+  <h2 class="accented" style="margin-top:28px;">Live Leaderboard (Per Day)</h2>
+  <div class="scroll-x picks-section">
+    <table id="leaderboardTable"></table>
+  </div>
 
   <!-- What-If simulator removed for faster load -->
   </div><!-- /.app-frame -->
   <!-- MNF submission section removed (now fully locked and displayed via CSV) -->
   <!-- External scripts loaded at end for clarity (defer not required here) -->
   <script src="config.js"></script>
+  <!-- Load dynamic schedule mapper BEFORE legacy leaderboard.js so globals populate -->
   <script src="schedule_init.js"></script>
   <script src="leaderboard.js"></script>
-  <script src="picks_submit.js"></script>
-  <script src="picks_auth_ui.js"></script>
+  <!-- Dynamic live integration (backend-driven). Falls back silently if APIs missing -->
+  <script src="leaderboard_live.js"></script>
   <!-- monday_submit.js removed -->
 </body>
 </html>

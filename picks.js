@@ -45,9 +45,10 @@
       defs.forEach((def,i)=>{
         const locked = !!locks[i];
         const existing = userDay[i] || '';
-        if(locked) return; // skip locked
-        if(def.result) return; // graded
-        if(existing) return; // already picked
+        // Skip if locked (already past) OR result already set (graded) OR user already has a pick (still allow edit? user request is remaining only) -> we exclude edits.
+        if(locked) return;
+        if(def.result) return; // already graded/resolved
+        if(existing) return; // user already picked, exclude from remaining list
         remaining.push({ day, index:i, def, existing:'' });
       });
     });
@@ -67,16 +68,18 @@
   async function saveAll(){
     setStatus('saveStatus','Saving...', true);
     try {
-      const dayBuffers = {}; // day -> array
+      // Group inputs by day, reconstruct full pick arrays (keeping existing picks for earlier indices) while filling only new ones.
+      const dayBuffers = {}; // day -> array (sized to definitions length)
       remaining.forEach((r,ri)=>{
         const val = (document.querySelector(`input[data-ri="${ri}"]`)||{}).value || '';
         if(!dayBuffers[r.day]){
           const defs = schedule.days[r.day].picks || [];
           const existing = (userPicks[r.day] && userPicks[r.day].picks) || [];
-          dayBuffers[r.day] = Array.from({length: defs.length}, (_,i)=> existing[i] || '');
+            dayBuffers[r.day] = Array.from({length: defs.length}, (_,i)=> existing[i] || '');
         }
         dayBuffers[r.day][r.index] = val.trim();
       });
+      // Save each day sequentially
       for(const [day,picksArr] of Object.entries(dayBuffers)){
         const resp = await api(SAVE_URL,'POST',{ day, picks: picksArr });
         if(!resp.ok) throw resp.error || ('Save failed for '+day);

@@ -24,8 +24,8 @@
       }));
       const picks = (def.picks||[]).map(p=> p.label);
       picksLabels[dayKey] = picks;
-      if(dayKey==='Fri'){ window.fridayGames = games; window.fridayStates = games.map((g,i)=>({ status:'STATUS_SCHEDULED', score:'0-0', home:0, away:0, period:0, clock:'', startTimeStr:g.start || '', meta:{ home:{abbr:g.homeAbbr}, away:{abbr:g.awayAbbr} } })); }
-      else if(dayKey==='Sat'){ window.saturdayGames = games; window.saturdayStates = games.map((g,i)=>({ status:'STATUS_SCHEDULED', score:'0-0', home:0, away:0, period:0, clock:'', startTimeStr:g.start || '', meta:{ home:{abbr:g.homeAbbr}, away:{abbr:g.awayAbbr} } })); }
+  if(dayKey==='Fri'){ window.fridayGames = games; window.fridayStates = games.map((g,i)=>({ status:'STATUS_SCHEDULED', score:'0-0', home:0, away:0, period:0, clock:'', startTimeStr:g.start || '', meta:{ home:{abbr:g.homeAbbr}, away:{abbr:g.awayAbbr} } })); window.fridayStartTimes = games.map(g=> g.start || ''); }
+  else if(dayKey==='Sat'){ window.saturdayGames = games; window.saturdayStates = games.map((g,i)=>({ status:'STATUS_SCHEDULED', score:'0-0', home:0, away:0, period:0, clock:'', startTimeStr:g.start || '', meta:{ home:{abbr:g.homeAbbr}, away:{abbr:g.awayAbbr} } })); window.saturdayStartTimes = games.map(g=> g.start || ''); }
       else if(dayKey==='Sun'){ window.sundayGames = games; window.sundayStates = games.map((g,i)=>({ status:'STATUS_SCHEDULED', score:'0-0', home:0, away:0, period:0, clock:'', startTimeStr:g.start || '', meta:{ home:{abbr:g.homeAbbr}, away:{abbr:g.awayAbbr} } })); window.sundayStartTimes = games.map(g=> g.start || ''); }
       else if(dayKey==='Mon'){ window.mondayGames = games; window.mondayStates = games.map((g,i)=>({ status:'STATUS_SCHEDULED', score:'0-0', home:0, away:0, period:0, clock:'', startTimeStr:g.start || '', meta:{ home:{abbr:g.homeAbbr}, away:{abbr:g.awayAbbr} } })); window.mondayStartTimes = games.map(g=> g.start || ''); }
       else if(dayKey==='Thurs'){ /* Thursday already historical; keep existing config if present */ }

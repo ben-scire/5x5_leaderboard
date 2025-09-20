@@ -45,10 +45,11 @@ const nicknameMap = {
   'conor.murphy30@gmail.com':'murph' // was Conor
 };
 
-// Base labels: only Thursday locked historical; all other days filled dynamically from schedule_init.js
+// Base labels: Thursday and Friday locked historical; all other days filled dynamically from schedule_init.js
 const picksLabels = {
   'Thurs':[ 'MIA +11.5 @ BUF', 'O/U 50.5 (MIA/BUF)', 'TD Prop (Yes/No)' ],
-  'Fri':[], 'Sat':[], 'Sun':[], 'Mon':[]
+  'Fri':[ 'Tulsa +11.5 @ Oklahoma State', 'Iowa -2.5 @ Rutgers' ],
+  'Sat':[], 'Sun':[], 'Mon':[]
 };
 
 // New week: userPicks with static locked Thursday picks embedded.
@@ -77,10 +78,35 @@ Object.assign(userPicks['Thurs'], {
   'lukeanastasi5@gmail.com':['MIA','Over','Yes']
 });
 
+// Week 4 Friday static picks (FINAL & LOCKED) — from 09_19_Picks.csv
+Object.assign(userPicks['Fri'], {
+  'adam.schmidt520@gmail.com':['Tulsa','Rutgers'],
+  'jlindsey3428@gmail.com':['Tulsa','Rutgers'],
+  'tomlinson6267@gmail.com':['Oklahoma State','Rutgers'],
+  'timjbohlman@gmail.com':['Tulsa','Iowa'],
+  'samuel.lehman3337@gmail.com':['Tulsa','Iowa'],
+  'max1solov@gmail.com':['Tulsa','Iowa'],
+  'williamjabbott22@gmail.com':['Oklahoma State','Iowa'],
+  'mzanin98@gmail.com':['Oklahoma State','Iowa'],
+  'kylejkz11@gmail.com':['Tulsa','Iowa'],
+  'hankrudden@yahoo.com':['Tulsa','Iowa'],
+  'jakelehman100@gmail.com':['Oklahoma State','Rutgers'],
+  'shawnscottcarl@gmail.com':['Oklahoma State','Iowa'],
+  'goodnoughdylan@gmail.com':['Oklahoma State','Iowa'],
+  'finsmaniac1551@gmail.com':['Tulsa','Iowa'],
+  'scire.ben@gmail.com':['Oklahoma State','Iowa'],
+  'lukeanastasi5@gmail.com':['Tulsa','Iowa'],
+  'conor.murphy30@gmail.com':['Tulsa','Iowa']
+});
+
 // Friday & later picks now provided at runtime via unified picks endpoints; no static seed.
 
-// Seed Thursday winners (final): MIA covered, game went Over 50.5, TD Prop hit (Yes)
-const coveredPicks = { 'Thurs':['MIA','Over','Yes'], 'Fri': Array(picksLabels['Fri'].length).fill(null), 'Sat': [], 'Sun': [], 'Mon': [] };
+// Seed Thursday and Friday winners (final): Thursday - MIA covered, game went Over 50.5, TD Prop hit (Yes); Friday - Tulsa and Iowa won
+const coveredPicks = { 
+  'Thurs':['MIA','Over','Yes'], 
+  'Fri': ['Tulsa','Iowa'], 
+  'Sat': [], 'Sun': [], 'Mon': [] 
+};
 
 // New week initial day defaults (Thursday completed, focusing on Friday)
 let currentDay = 'Fri';

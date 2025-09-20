@@ -1,4 +1,20 @@
-/* Core leaderboard logic (pruned) */
+/* Core logic extracted from leaderboard.html */
+
+// Static final results for past days (used when those days are complete or when
+// dynamic game objects are not present/loaded). This guarantees a scoreboard
+// row with actual final scores instead of a blank table.
+// NOTE: Thursday NFL: Miami @ Buffalo final 21-31 (BUF wins, MIA covers +11.5, total 52 > 50.5 => Over)
+// Friday CFB finals: Tulsa @ Oklahoma State 19-12 (Tulsa wins & covers), Iowa @ Rutgers 38-28 (Iowa wins & covers)
+// Lines/totals for Friday not provided -> leave null so we render blanks.
+const finalResults = {
+  'Thurs': [
+    { awayAbbr:'MIA', homeAbbr:'BUF', awayScore:21, homeScore:31, lineHome:-11.5, total:50.5 }
+  ],
+  'Fri': [
+    { awayAbbr:'TLSA', homeAbbr:'OKST', awayScore:19, homeScore:12, lineHome:null, total:null },
+    { awayAbbr:'IOWA', homeAbbr:'RUT', awayScore:38, homeScore:28, lineHome:null, total:null }
+  ]
+};
 
 function abbrevUser(u){ return nicknameMap[u.username] || u.username.split('@')[0]; }
 // Determine which side is covering given a home-based spread (negative => home favored, positive => away favored)
@@ -291,10 +307,18 @@ function headerAbbr(day, idx){
   } else if(day==='Sun' && Array.isArray(sundayGames)) {
     const g = sundayGames[idx]; if(g) return `${g.awayAbbr} @ ${g.homeAbbr} ${formatSpread(g)}`;
   } else if(day==='Mon' && Array.isArray(mondayGames)) {
-    const gIndex = (idx===0||idx===1)?0:1; const g = mondayGames[gIndex];
-    if(g){
-      if(idx===0 || idx===2) return `${g.awayAbbr} @ ${g.homeAbbr} ${formatSpread(g)}`;
-      return `O/U ${g.total}`;
+    // Support either (PROP, SPREAD, TOTAL) for single game OR legacy 4-pick (A spread, A total, B spread, B total)
+    if(mondayGames.length===1){
+      const g = mondayGames[0];
+      if(idx===0){ return 'PROP'; }
+      if(idx===1){ return `${g.awayAbbr} @ ${g.homeAbbr} ${formatSpread(g)}`; }
+      if(idx===2){ return `O/U ${g.total||''}`; }
+    } else {
+      const gIndex = (idx===0||idx===1)?0:1; const g = mondayGames[gIndex];
+      if(g){
+        if(idx===0 || idx===2) return `${g.awayAbbr} @ ${g.homeAbbr} ${formatSpread(g)}`;
+        return `O/U ${g.total}`;
+      }
     }
   }
   const raw = (picksLabels[day]||[])[idx]||''; return raw.replace(/#\d+\s*/g,'').replace(/\s+/g,' ').slice(0,18);
@@ -311,9 +335,14 @@ function liveGameCoverInfo(day, idx){
   else if(day==='Sat') { gameDef = saturdayGames[idx]; state = saturdayStates[idx]; }
   else if(day==='Sun') { gameDef = sundayGames[idx]; state = sundayStates[idx]; }
   else if(day==='Mon') {
-    // Map pick index to game + OU mode
-    const gIndex = (idx===0||idx===1)?0:1; gameDef = mondayGames[gIndex]; state = mondayStates[gIndex];
-    if(idx===1 || idx===3) isOU=true;
+    if(mondayGames.length===1){
+      gameDef = mondayGames[0]; state = mondayStates[0];
+      if(idx===2) isOU=true; // only third column is total
+      if(idx===0) return null; // PROP column no live cover concept
+    } else {
+      const gIndex = (idx===0||idx===1)?0:1; gameDef = mondayGames[gIndex]; state = mondayStates[gIndex];
+      if(idx===1 || idx===3) isOU=true;
+    }
   }
   if(!state || !gameDef) return null;
   const status = state.status||'';
@@ -331,10 +360,11 @@ function liveGameCoverInfo(day, idx){
 }
 
 function renderPicksTable(day=currentDay){
+  // Requirement update: show scheduled games for Sat-Sun-Mon again (no kickoff-based hiding). Always render all defined columns for selected day.
   const tbl = document.getElementById('picksTable');
   let labelCount = (picksLabels[day]||[]).length;
   if(day==='Sun'){
-    // If labels are shorter than any loaded user picks array, expand to that length for display
+    // Preserve earlier dynamic expansion in case server adds more Sunday picks than initial labels length.
     const maxUserLen = Object.values(userPicks['Sun']||{}).reduce((m,arr)=> Math.max(m, Array.isArray(arr)?arr.length:0), 0);
     if(maxUserLen > labelCount) labelCount = maxUserLen;
   }
@@ -350,28 +380,7 @@ function renderPicksTable(day=currentDay){
   }
   function statusRank(st){ if(st==='STATUS_FINAL') return 2; if(st && (st.startsWith('STATUS_IN')|| st==='STATUS_HALFTIME')) return 0; return 1; }
   let indices = Array.from({length:labelCount}, (_,i)=>i);
-  // Sunday: only show games that have started (hide future picks so users can't infer choices early)
-  // Monday: requirement change (show all 4 MNF picks immediately even if not started)
-  if(day==='Sun'){
-    const now = new Date();
-    function kickoffHasPassed(i){
-      let raw='';
-      if(day==='Sun') raw = (typeof sundayStartTimes!=='undefined' && sundayStartTimes[i]) || '';
-      else if(day==='Mon'){ const gi=(i===0||i===1)?0:1; raw = (typeof mondayStartTimes!=='undefined' && mondayStartTimes[gi]) || ''; }
-      if(!raw) return false;
-      const m = raw.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
-      if(!m) return false;
-      let h=parseInt(m[1],10); const min=parseInt(m[2],10); const ap=m[3].toUpperCase();
-      if(ap==='PM' && h!==12) h+=12; if(ap==='AM' && h===12) h=0;
-      const kickoff = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, min, 0, 0);
-      return now >= kickoff;
-    }
-    indices = indices.filter(i=>{
-      const st = statusFor(day,i);
-      if(st && st !== 'STATUS_SCHEDULED') return true; // live or final
-      return kickoffHasPassed(i);
-    });
-  }
+  // Gating logic removed: always show all indices so users can see scheduled future games/picks.
   // If no visible indices (e.g., before 1PM), show placeholder row
   if(indices.length===0){
     const placeholder = '<tr><th class="th-small">Player</th></tr>' + users.map(u=>`<tr><td>${abbrevUser(u)}</td></tr>`).join('') + '<tr><td style="text-align:center;padding:10px 6px;font-size:12px;color:#9fb2bf;" colspan="1">No games have kicked off yet.</td></tr>';
@@ -391,9 +400,13 @@ function renderPicksTable(day=currentDay){
       const displayPick = lookupAbbr(rawPick);
   const cov = coveredPicks[day][i];
   let cls='';
-  if(cov==='PUSH') cls='push';
-  else if(cov && rawPick && rawPick!=='-' && cov.toLowerCase() === rawPick.toLowerCase()) cls='hit';
-  else if(cov && rawPick && rawPick!=='-' && cov.toLowerCase() !== rawPick.toLowerCase()) cls='miss';
+  if(cov){
+    const normPick = (rawPick||'').toString().trim().toLowerCase();
+    const normCov = cov.toString().trim().toLowerCase();
+    if(cov==='PUSH') cls='push';
+    else if(normPick && normCov && normPick === normCov) cls='hit';
+    else if(normPick && normCov && normPick !== normCov) cls='miss';
+  }
       // Live covering effect (only if not final yet and no hit/miss assigned)
         if(!cov){
           // Determine if this column represents a total (Over/Under) where we suppress live shading
@@ -457,6 +470,24 @@ function updateScoreboard(){
     day==='Sun'? { games:sundayGames, states:sundayStates, times:sundayStartTimes } :
     day==='Mon'? { games:mondayGames, states:mondayStates, times:mondayStartTimes } : { games:[], states:[], times:[] };
   const { games, states, times } = meta(scoreboardDay);
+
+  // If past completed day (Thurs/Fri) and we have static final results, render those (preferred over labels fallback)
+  if((scoreboardDay==='Thurs' || scoreboardDay==='Fri') && (!games || !games.length) && finalResults[scoreboardDay]){
+    const header = '<tr><th>Game</th><th>Final Score</th><th>Spread</th><th>Total</th></tr>';
+    const rows = finalResults[scoreboardDay].map(fr=>{
+      const scoreFrag = `${fr.awayScore}-${fr.homeScore}`;
+      let spreadTxt='';
+      if(typeof fr.lineHome === 'number'){
+        const fav = fr.lineHome < 0 ? fr.homeAbbr : fr.awayAbbr;
+        spreadTxt = `${fav} -${Math.abs(fr.lineHome)}`;
+      }
+      let totalTxt = fr.total? `O/U ${fr.total}`: '';
+      return `<tr class="final-row"><td><span class="game-label">${fr.awayAbbr} @ ${fr.homeAbbr}</span></td><td>${scoreFrag} <span class="detail">FINAL</span></td><td>${spreadTxt}</td><td>${totalTxt}</td></tr>`;
+    }).join('');
+    tbl.innerHTML = header + rows;
+    const titleEl = document.getElementById('scoresTitle'); if(titleEl) titleEl.textContent = 'Scores ('+scoreboardDay+')';
+    return;
+  }
   function spreadLabel(g){ const ln=g.lineHome; if(typeof ln!=='number') return ''; if(ln===0) return 'PK'; const fav = ln<0? g.homeAbbr : g.awayAbbr; return `${fav} -${Math.abs(ln)}`; }
   function totalLabel(g){ return g.total ? `O/U ${g.total}` : ''; }
   function statusDetail(state){
@@ -485,9 +516,43 @@ function updateScoreboard(){
 }
 
 /* ============= Live Fetchers ============= */
-// Thursday NFL + old CFB fetchers removed (Thursday week finished & static locked)
-async function updateNFLGame(){} // no-op retained for minimal call changes
-async function updateCollegeGame(){} // no-op
+async function updateNFLGame(){
+  if(!nflGame.eventId) { return; }
+  try {
+    const resp = await fetch(`https://site.api.espn.com/apis/site/v2/sports/football/nfl/summary?event=${nflGame.eventId}`); if(!resp.ok) throw new Error('HTTP '+resp.status); const data = await resp.json();
+    const game = data.header.competitions[0]; const status = game.status.type.name; const home = game.competitors.find(c=>c.homeAway==='home'); const away = game.competitors.find(c=>c.homeAway==='away');
+    if(data.drives && data.drives.current){ const d = data.drives.current; nflState.drive = { possession: d.team && d.team.id, downDistanceText: d.displayResult ? null : d.shortDisplayResult, shortDownDistanceText: d.shortDownDistanceText || d.downDistanceText, yardsToEndzone: d.yardsToEndzone, start: d.start && { yardLine: d.start.yardLine, team: d.start.team }, current: d.end && { yardLine: d.end.yardLine, team: d.end.team }, clock: game.status && game.status.displayClock ? { displayValue: game.status.displayClock } : null, isRedZone: d.isRedZone, teamIds: { [away.team.id]: away.team.id, [home.team.id]: home.team.id }, homeTeamId: home.team.id, awayTeamId: away.team.id, plays: d.plays && d.plays.length ? d.plays.length : d.playCount, yards: d.yards, timeElapsed: d.timeElapsed || (d.start && d.end && d.end.clock && d.end.clock.displayValue), yardsToGo: d.yardsToGo || d.distance }; ensureBallSpot(nflState.drive, data); } else { nflState.drive = null; }
+    const oldAway = nflState.away, oldHome = nflState.home; nflState.away = parseInt(away.score||'0',10); nflState.home = parseInt(home.score||'0',10); nflState.score = `${nflState.away}-${nflState.home}`; nflState.status = status;
+    const coverProb = estimateCoverProbability(nflGame, nflState); const totalProb = estimateTotalProbability(nflGame, nflState);
+    nflState.period = game.status && game.status.period ? game.status.period : nflState.period;
+    function mapColorNFL(abbr){ const m={WSH:'#5A1414',GB:'#203731'}; return m[abbr]||'#ff8800'; }
+    nflState.meta = { coverProb, totalProb, favored: nflGame.lineHome<0? 'HOME':'AWAY', home:{abbr:nflGame.homeAbbr}, away:{abbr:nflGame.awayAbbr}, homeColor:mapColorNFL(nflGame.homeAbbr), awayColor:mapColorNFL(nflGame.awayAbbr) };
+    if(status === 'STATUS_FINAL'){
+      const spreadCover = determineCoverSpread(parseInt(home.score,10), parseInt(away.score,10), nflGame.lineHome);
+      if(spreadCover==='HOME') coveredPicks['Thurs'][0] = 'GB'; else if(spreadCover==='AWAY') coveredPicks['Thurs'][0] = 'WASH'; else coveredPicks['Thurs'][0] = 'PUSH';
+      const totalPts = parseInt(home.score,10)+parseInt(away.score,10);
+      if(totalPts > nflGame.total) coveredPicks['Thurs'][1] = 'Over'; else if(totalPts < nflGame.total) coveredPicks['Thurs'][1] = 'Under'; else coveredPicks['Thurs'][1] = 'PUSH';
+      recalcPoints('Thurs'); recalcTotal(); updateLeaderboard(); renderPicksTable(picksDay);
+    }
+    updateScoreboard();
+  } catch(err){ console.warn('Failed NFL fetch', err); }
+}
+
+async function updateCollegeGame(){
+  try { const resp = await fetch(`https://site.api.espn.com/apis/site/v2/sports/football/college-football/summary?event=${collegeGame.eventId}`); if(!resp.ok) throw new Error('HTTP '+resp.status); const data = await resp.json();
+    const game = data.header.competitions[0]; const status = game.status.type.name; const home = game.competitors.find(c=>c.homeAway==='home'); const away = game.competitors.find(c=>c.homeAway==='away');
+    if(data.drives && data.drives.current){ const d = data.drives.current; collegeState.drive = { possession: d.team && d.team.id, downDistanceText: d.displayResult ? null : d.shortDisplayResult, shortDownDistanceText: d.shortDownDistanceText || d.downDistanceText, yardsToEndzone: d.yardsToEndzone, start: d.start && { yardLine: d.start.yardLine, team: d.start.team }, current: d.end && { yardLine: d.end.yardLine, team: d.end.team }, clock: game.status && game.status.displayClock ? { displayValue: game.status.displayClock } : null, isRedZone: d.isRedZone, teamIds: { [away.team.id]: away.team.id, [home.team.id]: home.team.id }, homeTeamId: home.team.id, awayTeamId: away.team.id, plays: d.plays && d.plays.length ? d.plays.length : d.playCount, yards: d.yards, timeElapsed: d.timeElapsed || (d.start && d.end && d.end.clock && d.end.clock.displayValue), yardsToGo: d.yardsToGo || d.distance }; ensureBallSpot(collegeState.drive, data); } else { collegeState.drive = null; }
+    const oldAway = collegeState.away, oldHome = collegeState.home; collegeState.away = parseInt(away.score||'0',10); collegeState.home = parseInt(home.score||'0',10); collegeState.score = `${collegeState.away}-${collegeState.home}`; collegeState.status = status; const coverProb = estimateCoverProbability(collegeGame, collegeState); const totalProb = estimateTotalProbability(collegeGame, collegeState); collegeState.period = game.status && game.status.period ? game.status.period : collegeState.period;
+    function mapColorCFB(abbr){ const m={NCSU:'#CC0000',WF:'#9E7E38'}; return m[abbr]||'#ff8800'; }
+    collegeState.meta = { coverProb, totalProb, favored: collegeGame.lineHome<0? 'HOME':'AWAY', home:{abbr:collegeGame.homeAbbr}, away:{abbr:collegeGame.awayAbbr}, homeColor:mapColorCFB(collegeGame.homeAbbr), awayColor:mapColorCFB(collegeGame.awayAbbr) };
+    if(status === 'STATUS_FINAL'){
+      const cover = determineCoverSpread(parseInt(home.score,10), parseInt(away.score,10), collegeGame.lineHome);
+      if(cover==='HOME') coveredPicks['Thurs'][2] = 'WF'; else if(cover==='AWAY') coveredPicks['Thurs'][2] = 'NCSU'; else coveredPicks['Thurs'][2] = 'PUSH';
+      recalcPoints('Thurs'); recalcTotal(); updateLeaderboard(); renderPicksTable(picksDay);
+    }
+    updateScoreboard();
+  } catch(err){ console.warn('Failed CFB fetch', err); }
+}
 
 let _lastFridayFetch = 0;
 async function updateFridayGames(){
@@ -577,7 +642,12 @@ async function updateMondayGames(){
 }
 
 /* ============= Utility / Resolution ============= */
-async function resolveSaturdayEventIds(){} // removed resolver (no Saturday games yet)
+async function resolveSaturdayEventIds(){
+  const unresolvedIdx = saturdayGames.reduce((acc,g,i)=>{ if(!g.eventId) acc.push(i); return acc; }, []); if(!unresolvedIdx.length) return;
+  try { const resp = await fetch('https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?dates=20250913'); if(!resp.ok) throw new Error('HTTP '+resp.status); const data = await resp.json(); const events = data.events || []; function cleanName(name){ return (name||'').replace(/#\d+\s*/g,'').replace(/\./g,'').toLowerCase(); }
+    events.forEach(ev=>{ const comp = ev.competitions && ev.competitions[0]; if(!comp) return; const competitors = comp.competitors || []; const teams = competitors.map(c=>({ raw:c.team && c.team.displayName, abbr:c.team && c.team.abbreviation })); const cleaned = teams.map(t=>({ ...t, clean: cleanName(t.raw) })); unresolvedIdx.forEach(idx=>{ const g = saturdayGames[idx]; if(g.eventId) return; const awayClean = cleanName(g.away.replace(/#\d+\s*/g,'')); const homeClean = cleanName(g.home.replace(/#\d+\s*/g,'')); const hasAway = cleaned.some(t=> t.clean.includes(awayClean) || awayClean.includes(t.clean) || (g.awayAbbr && t.abbr===g.awayAbbr)); const hasHome = cleaned.some(t=> t.clean.includes(homeClean) || homeClean.includes(t.clean) || (g.homeAbbr && t.abbr===g.homeAbbr)); if(hasAway && hasHome){ g.eventId = ev.id; console.log('[WhatIf] Resolved Saturday eventId', idx, g.away, '@', g.home, '->', g.eventId); } }); });
+  } catch(err){ console.warn('Failed to resolve Saturday event IDs', err); }
+}
 
 /* ============= Chart Height & Reveal ============= */
 function adjustChartHeight(){ const canvas = document.getElementById('leaderboardChart'); const isMobile = innerWidth < 680; const per = isMobile ? 34 : 30; const base = isMobile ? 80 : 100; canvas.style.height = (users.length * per + base) + 'px'; if(chart) chart.resize(); }
@@ -585,9 +655,11 @@ let leaderboardShown = false; function maybeRevealLeaderboard(){ if(leaderboardS
 window.addEventListener('resize', ()=>{ if(leaderboardShown){ adjustChartHeight(); updateLeaderboard(); } });
 
 /* ============= Picks Toggle ============= */
+// Default visible day (will set proper initial on load later).
 let picksDay='Sat';
 (function initDayToggle(){
   const host=document.getElementById('dayToggleBar'); if(!host) return;
+  // Full range of days reinstated.
   const order=['Thurs','Fri','Sat','Sun','Mon'];
   function btn(day){ return `<button data-day="${day}" class="picks-btn ${day===picksDay?'active':''}">${day}</button>`; }
   function render(){ host.innerHTML = order.map(btn).join(''); }
@@ -609,8 +681,10 @@ let picksDay='Sat';
 /* What-If Simulator removed */
 
 /* ============= Probability Helpers (light heuristics) ============= */
-// Probability + drive detail helpers removed (not displayed)
-function ensureBallSpot(){}
+function estimateCoverProbability(gameObj, state){ const line = gameObj.lineHome; const home = state.home, away = state.away; const diff = home - away; let remainingFrac = 1; if(state.status && state.status.startsWith('STATUS_IN')) remainingFrac = 0.5; else if(state.status==='STATUS_FINAL') remainingFrac = 0; const marginNeeded = Math.abs(line); let coverEdge; if(line<0){ coverEdge = (diff - marginNeeded); } else { coverEdge = ((-diff) - marginNeeded); } const adjustedEdge = coverEdge / Math.max(1, marginNeeded); const timeWeight = 3 * (1 - remainingFrac) + 1; const x = adjustedEdge * timeWeight; const pCoverFav = 1 / (1 + Math.exp(-x)); return line<0 ? { homeCover:pCoverFav, awayCover:1-pCoverFav } : { awayCover:pCoverFav, homeCover:1-pCoverFav }; }
+function estimateTotalProbability(gameObj, state){ const totalLine = gameObj.total || 0; if(!totalLine) return { over:0.5, under:0.5 }; const scored = state.home + state.away; let remainingFrac = 1; if(state.status && state.status.startsWith('STATUS_IN')) remainingFrac = 0.5; if(state.status==='STATUS_FINAL') remainingFrac = 0; const projected = scored + (scored * (remainingFrac)); const diff = projected - totalLine; const x = diff / (totalLine*0.25 + 1); const pOver = 1/(1+Math.exp(-x)); return { over:pOver, under:1-pOver }; }
+
+function ensureBallSpot(driveObj, data){ if(!driveObj) return; if(driveObj.current && typeof driveObj.current.yardLine==='number') return; try { const cur = data.drives && data.drives.current; if(cur && cur.plays && cur.plays.length){ const lp = cur.plays[cur.plays.length-1]; const end = lp && lp.end ? lp.end : (lp && lp.start ? lp.start : null); if(end && typeof end.yardLine==='number'){ driveObj.current = { yardLine:end.yardLine, team:end.team || (cur.team) }; return; } } if(data.drives && data.drives.previous && data.drives.previous.length){ const prev = data.drives.previous[data.drives.previous.length-1]; if(prev && prev.end && typeof prev.end.yardLine==='number'){ driveObj.current = { yardLine:prev.end.yardLine, team: prev.end.team || prev.team }; } } } catch(e){} }
 
 /* ============= Init on Load ============= */
 window.addEventListener('load', async () => {
@@ -618,6 +692,7 @@ window.addEventListener('load', async () => {
   // Determine today's relevant day (prioritize Sun if today is Sunday)
   const now = new Date();
   const dow = now.getDay(); // 0=Sun, 1=Mon
+  // Original selection logic restored so users land on relevant active day.
   let initialDay = 'Sat';
   if(dow===0) initialDay='Sun';
   else if(dow===1) initialDay='Mon';
@@ -630,7 +705,7 @@ window.addEventListener('load', async () => {
   if(liveCbInit){ liveCbInit.checked = true; }
   const noteInit = document.getElementById('liveProjNote'); if(noteInit) noteInit.style.display='inline';
   updateLeaderboard();
-  picksDay=initialDay; scoreboardDay=initialDay; if(window.__renderDayToggle) window.__renderDayToggle(); renderPicksTable(picksDay); document.getElementById('scoresTitle').textContent='Scores ('+initialDay+')';
+  picksDay=initialDay; scoreboardDay=initialDay; if(window.__renderDayToggle) window.__renderDayToggle(); renderPicksTable(picksDay); const stEl=document.getElementById('scoresTitle'); if(stEl) stEl.textContent='Scores ('+initialDay+')';
   await Promise.all([
     updateNFLGame().catch(e=>console.warn('NFL init fetch failed', e)),
     updateCollegeGame().catch(e=>console.warn('CFB Thurs init fetch failed', e)),
