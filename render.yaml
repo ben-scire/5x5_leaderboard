@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: five5-leaderboard
+    name: 5x5-coach
     runtime: python
     plan: starter
     buildCommand: pip install -r requirements.txt
