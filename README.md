@@ -189,6 +189,7 @@ Environment Variables (optional):
 Persistence:
 
 * `data/` is stored on the attached disk. Re-deploys do not wipe picks.
+* If Blueprint import errors on `render.yaml`, ensure the file uses `disk:` (singular) not `disks:` and that you replace `SECRET_KEY` value in the dashboard (the committed value is a placeholder).
 
 ## Archival Policy
 

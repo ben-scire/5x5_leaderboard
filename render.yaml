@@ -7,6 +7,9 @@ services:
     startCommand: gunicorn -w 2 -b 0.0.0.0:$PORT server:app
     autoDeploy: true
     healthCheckPath: /healthz
+    envVars:
+      - key: SECRET_KEY
+        value: REPLACE_ME_IN_DASHBOARD
     disk:
       name: picks-data
       mountPath: /opt/render/project/src/data
