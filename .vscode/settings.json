@@ -1,0 +1,32 @@
+{
+  "liveServer.settings.port": 5500,
+  "liveServer.settings.host": "127.0.0.1",
+  "liveServer.settings.open": "leaderboard.html",
+  "liveServer.settings.file": "leaderboard.html",
+  "liveServer.settings.root": "/",
+  "liveServer.settings.wait": 200,
+  "liveServer.settings.fullReload": true,
+  "liveServer.settings.ext": "html,htm,css,js,json",
+  "liveServer.settings.ignoreFiles": [
+    "**/.git/**",
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/*.log",
+    "**/*.map"
+  ],
+  "liveServer.settings.useLocalIp": true,
+  "liveServer.settings.donotShowInfoMsg": true,
+  "liveServer.settings.browser": "default",
+  "css.autoValidation": "Always",
+  "css.styleSheets": [
+  ],
+  "python.analysis.autoImportCompletions": true,
+  "chat.mcp.discovery.enabled": {
+    "claude-desktop": true,
+    "windsurf": true,
+    "cursor-global": true,
+    "cursor-workspace": true
+  },
+  "chat.mcp.autostart": "onlyNew",
+  "chat.mcp.serverSampling": {}
+}

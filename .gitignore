@@ -1,0 +1,16 @@
+node_modules/
+venv/
+*.pyc
+__pycache__/
+backups/
+*.log
+data/*.tmp
+old_weeks_data/
+*.DS_Store
+archive/old_weeks_data/data/*.json
+archive/old_weeks_data/data/snapshots/
+archive/legacy_forms/
+archive/**/*.tmp
+/*.csv
+!5x5_leaderboard/data/week_schedule.csv
+!5x5_leaderboard/Week_Schedule_Final.csv

@@ -1,0 +1,26 @@
+Day,Sport,EventId,Away,AwayAbbr,Home,HomeAbbr,Market,Line,Total,StartTimeET,PropLabel,Date,Result
+Thu,NFL,401772937,Miami Dolphins,MIA,Buffalo Bills,BUF,PROP,,,8:15 PM ET,Anytime TD - Keon Coleman OR Jaylen Waddle,2025-09-18,YES
+Thu,NFL,401772937,Miami Dolphins,MIA,Buffalo Bills,BUF,SPREAD,11.5,,8:15 PM ET,,2025-09-18,MIA
+Thu,NFL,401772937,Miami Dolphins,MIA,Buffalo Bills,BUF,TOTAL,,50.5,8:15 PM ET,,2025-09-18,OVER
+Fri,NCAAF,401756900,Tulsa,TLSA,Oklahoma State,OKST,SPREAD,-11.5,,7:30 PM ET,,2025-09-19,
+Fri,NCAAF,401752844,Iowa,IOWA,Rutgers,RUTG,SPREAD,-2.5,,8:00 PM ET,,2025-09-19,
+Sat,NCAAF,401756901,Texas Tech,TTU,Utah,UTAH,SPREAD,3.5,,12:00 PM ET,,2025-09-20,
+Sat,NCAAF,401754636,SMU,SMU,TCU,TCU,SPREAD,6.5,,12:00 PM ET,,2025-09-20,
+Sat,NCAAF,401762469,North Texas,UNT,Army,ARMY,SPREAD,2.5,,12:00 PM ET,,2025-09-20,
+Sat,NCAAF,401754640,North Carolina,UNC,UCF,UCF,SPREAD,7.5,,3:30 PM ET,,2025-09-20,
+Sat,NCAAF,401752714,Auburn,AUB,Oklahoma,OU,SPREAD,-7.5,,3:30 PM ET,,2025-09-20,
+Sat,NCAAF,401752846,Michigan,MICH,Nebraska,NEB,SPREAD,-1.5,,3:30 PM ET,,2025-09-20,
+Sat,NCAAF,401752709,Florida,FLA,Miami (FL),MIA,SPREAD,-9.5,,7:30 PM ET,,2025-09-20,
+Sat,NCAAF,401752843,Illinois,ILL,Indiana,IND,SPREAD,-6.5,,7:30 PM ET,,2025-09-20,
+Sun,NFL,401772732,Pittsburgh Steelers,PIT,New England Patriots,NE,SPREAD,1.5,,1:00 PM ET,,2025-09-21,
+Sun,NFL,401772734,Houston Texans,HOU,Jacksonville Jaguars,JAX,SPREAD,-1.5,,1:00 PM ET,,2025-09-21,
+Sun,NFL,401772839,Los Angeles Rams,LAR,Philadelphia Eagles,PHI,SPREAD,-3.5,,1:00 PM ET,,2025-09-21,
+Sun,NFL,401772735,Denver Broncos,DEN,Los Angeles Chargers,LAC,SPREAD,2.5,,4:05 PM ET,,2025-09-21,
+Sun,NFL,401772736,New Orleans Saints,NO,Seattle Seahawks,SEA,SPREAD,-7.5,,4:05 PM ET,,2025-09-21,
+Sun,NFL,401772843,Arizona Cardinals,ARI,San Francisco 49ers,SF,SPREAD,-2.5,,4:25 PM ET,,2025-09-21,
+Sun,NFL,401772844,Dallas Cowboys,DAL,Chicago Bears,CHI,SPREAD,-1.5,,4:25 PM ET,,2025-09-21,
+Sun,NFL,401772920,Kansas City Chiefs,KC,New York Giants,NYG,SPREAD,-6.5,,8:20 PM ET,,2025-09-21,
+Sun,NFL,401772920,Kansas City Chiefs,KC,New York Giants,NYG,TOTAL,,45.5,8:20 PM ET,,2025-09-21,
+Mon,NFL,401772812,Detroit Lions,DET,Baltimore Ravens,BAL,PROP,1.5,,8:15 PM ET,Lamar Jackson Passing TDs,2025-09-22,
+Mon,NFL,401772812,Detroit Lions,DET,Baltimore Ravens,BAL,SPREAD,-4.5,,8:15 PM ET,,2025-09-22,
+Mon,NFL,401772812,Detroit Lions,DET,Baltimore Ravens,BAL,TOTAL,,53.5,8:15 PM ET,,2025-09-22,
