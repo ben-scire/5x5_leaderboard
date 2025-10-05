@@ -72,6 +72,18 @@ body.post-phase #gamesTable { box-shadow:0 12px 28px -14px rgba(0,0,0,.65),0 0 0
 #gamesTable td { position:relative; }
 #gamesTable th, #gamesTable td { text-align:center; }
 .game-label { font-weight:600; letter-spacing:.4px; color:#e2f8ff; }
+/* Half-cell cover highlighting: away (left) or home (right) */
+td.cover-away, td.cover-home { position:relative; overflow:hidden; }
+td.cover-away:before, td.cover-home:before { content:""; position:absolute; top:0; bottom:0; background:linear-gradient(135deg,rgba(39,201,111,0.55),rgba(39,201,111,0.15)); pointer-events:none; }
+td.cover-away:before { left:0; width:50%; border-right:1px solid rgba(39,201,111,0.35); }
+td.cover-home:before { right:0; width:50%; border-left:1px solid rgba(39,201,111,0.35); }
+/* Pulsing animation for covering side */
+@keyframes coverPulse { 0%{ opacity:.55; filter:brightness(1); } 50%{ opacity:.9; filter:brightness(1.25); } 100%{ opacity:.55; filter:brightness(1); } }
+td.cover-away:before, td.cover-home:before { animation:coverPulse 2.4s ease-in-out infinite; }
+/* Faint red on the other (non-cover) half */
+td.cover-away:after, td.cover-home:after { content:""; position:absolute; top:0; bottom:0; width:50%; pointer-events:none; background:linear-gradient(135deg,rgba(255,77,79,0.15),rgba(255,77,79,0.04)); }
+td.cover-away:after { right:0; }
+td.cover-home:after { left:0; }
 .spread-pill { display:inline-block; margin:4px 4px 0; padding:2px 8px 3px; font-size:10px; font-weight:600; letter-spacing:.5px; background:linear-gradient(135deg,#123a4a,#0d2a35); border:1px solid #1a5368; border-radius:14px; color:#9fd2e6; box-shadow:0 0 0 1px rgba(255,255,255,0.05),0 2px 6px -3px rgba(0,0,0,.65); }
 .live-row td { background:linear-gradient(90deg,rgba(255,168,76,0.18),rgba(255,168,76,0.02)); }
 .final-row td { background:linear-gradient(90deg,rgba(39,201,111,0.18),rgba(39,201,111,0.02)); }

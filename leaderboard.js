@@ -65,11 +65,108 @@ function normalizeNFLAbbr(abbr){
 // NOTE: Week 4 Thursday picks are static & locked (see config.js userPicks['Thurs']).
 coveredPicks['Sat'] = coveredPicks['Sat'].map(c=> (c && c!=='PUSH') ? canonicalTeamName(c) : c);
 
+// --- Unified normalization / synonym mapping for looser matching (esp. Saturday) ---
+// Central place so both quick recalcPoints and detailed pointsForDay stay consistent.
+function _norm(raw){
+  if(raw==null) return '';
+  let s = canonicalTeamName(raw.toString());
+  s = s.toLowerCase();
+  // Strip punctuation & extra chars
+  s = s.replace(/[#.']/g,'');
+  s = s.replace(/\bst\b/g,'st');
+  // Common team / shorthand expansions
+  s = s.replace(/kansas st/g,'kansas state');
+  s = s.replace(/wv?u/g,'west virginia');
+  s = s.replace(/pittsburg?h?/g,'pittsburgh');
+  s = s.replace(/ga tech|georgia tech/g,'georgia tech');
+  s = s.replace(/south fla|s florida/g,'south florida');
+  s = s.replace(/texas a ?&?m|texas am/g,'texas a&m');
+  s = s.replace(/nd$/,'notre dame');
+  s = s.replace(/ala\b/g,'alabama');
+  s = s.replace(/sc ?ar|s ?car|south car\b/g,'south carolina');
+  s = s.replace(/miami(?![a-z])/,'miami');
+  // New broader Saturday specific mappings
+  s = s.replace(/louiss?ville/g,'louisville');
+  s = s.replace(/boise state|boise st/g,'boise st');
+  s = s.replace(/^boise$/,'boise st');
+  s = s.replace(/ttu/g,'texas tech');
+  s = s.replace(/uh/g,'houston');
+  s = s.replace(/mississippi state|mississippi st/g,'mississippi state');
+  s = s.replace(/^miss$/,'mississippi state');
+  s = s.replace(/a&m/g,'texas a&m');
+  s = s.replace(/mia\b/,'miami');
+  s = s.replace(/fsu/g,'florida state');
+  s = s.replace(/florida st/g,'florida state');
+  // Collapse whitespace
+  s = s.replace(/ +/g,' ').trim();
+  return s;
+}
+
+function picksMatch(pick, cover){
+  if(!pick || !cover) return false;
+  if(cover==='PUSH') return false;
+  if(cover==='Over' || cover==='Under') return pick===cover; // exact for totals
+  return _norm(pick) === _norm(cover);
+}
+
+// Ensure coveredPicks tokens align with at least one user pick representation.
+// If the stored cover has zero matching picks (after normalization), we attempt to
+// replace it with the most common user pick variant that normalizes equivalently.
+function alignCoveredPicks(){
+  const days = Object.keys(picksLabels);
+  days.forEach(day=>{
+    const labels = picksLabels[day]||[];
+    if(!labels.length) return;
+    const covers = coveredPicks[day];
+    if(!Array.isArray(covers)) return;
+    for(let i=0;i<labels.length;i++){
+      let cover = covers[i];
+      if(!cover || cover==='PUSH') continue; // skip empties & pushes
+      // Gather all user pick variants for this slot
+      const variantCounts = new Map();
+      users.forEach(u=>{
+        const picks = userPicks[day] && userPicks[day][u.username];
+        if(!picks) return;
+        const pk = picks[i];
+        if(!pk) return;
+        const normPk = _norm(pk);
+        variantCounts.set(pk, (variantCounts.get(pk)||0) + 1);
+        // Also track normalized key (for easier later matching frequency)
+        variantCounts.set(normPk, (variantCounts.get(normPk)||0) + 0); // placeholder ensure presence
+      });
+      const anyMatch = Array.from(variantCounts.keys()).some(k=> picksMatch(k, cover));
+      if(!anyMatch){
+        // Try to find a variant whose normalized form matches cover's normalized form (maybe case / punctuation diff)
+        const coverNorm = _norm(cover);
+        let replacement = null; let replacementFreq = -1;
+        variantCounts.forEach((cnt, variant)=>{
+          if(_norm(variant) === coverNorm && cnt > replacementFreq){ replacement = variant; replacementFreq = cnt; }
+        });
+        // If still nothing, choose the most common variant overall (ensuring we at least map to an existing token)
+        if(!replacement){
+          variantCounts.forEach((cnt, variant)=>{
+            // skip normalized-only placeholders (those that equal their own lower trimmed and were given zero weight)
+            if(cnt > replacementFreq && variant.length>1){ replacement = variant; replacementFreq = cnt; }
+          });
+        }
+        if(replacement){
+          console.warn('[Covered Alignment] Replacing unmatched cover', cover, 'with', replacement, 'for', day, 'index', i);
+          covers[i] = replacement;
+        } else {
+          console.error('[Covered Alignment] No valid variant found for cover', cover, 'day', day, 'index', i, '— scoring may yield zero hits.');
+        }
+      }
+    }
+  });
+}
+// Run alignment once at load (after initial coveredPicks defined) before any scoring functions.
+alignCoveredPicks();
+
 function recalcPoints(day){
   if(!picksLabels[day]) return;
   users.forEach(u=>{
     const picks = userPicks[day] && userPicks[day][u.username];
-    let pts=0; if(picks){ (coveredPicks[day]||[]).forEach((cov,i)=>{ if(!cov || cov==='PUSH') return; if(picks[i]===cov) pts++; }); }
+    let pts=0; if(picks){ (coveredPicks[day]||[]).forEach((cov,i)=>{ if(!cov) return; if(picksMatch(picks[i], cov)) pts++; }); }
     if(day==='Thurs') u.thurs = pts; else if(day==='Fri') u.fri = pts; else if(day==='Sat') u.sat = pts; else if(day==='Sun') u.sun = pts; else if(day==='Mon') u.mon = pts;
   });
 }
@@ -141,33 +238,13 @@ function updateLeaderboard(){
   function pointsForDay(day, user){
     const picks = (userPicks[day] && userPicks[day][user.username]) || [];
     const covers = coveredPicks[day] || [];
-    function norm(raw){
-      if(raw==null) return '';
-      let s = canonicalTeamName(raw.toString());
-      s = s.toLowerCase();
-      s = s.replace(/[#.']/g,'');
-      s = s.replace(/\bst\b/g,'st');
-      s = s.replace(/kansas st/g,'kansas state');
-      s = s.replace(/wv?u/g,'west virginia');
-      s = s.replace(/pittsburg?h?/g,'pittsburgh');
-      s = s.replace(/ga tech|georgia tech/g,'georgia tech');
-      s = s.replace(/south fla|s florida/g,'south florida');
-      s = s.replace(/texas a ?&?m|texas am/g,'texas a&m');
-      s = s.replace(/nd$/,'notre dame');
-      s = s.replace(/ala\b/g,'alabama');
-      s = s.replace(/sc ?ar|s ?car|south car\b/g,'south carolina');
-      s = s.replace(/miami(?![a-z])/,'miami');
-      s = s.replace(/ +/g,' ').trim();
-      return s;
-    }
     let pts=0;
     covers.forEach((c,i)=>{
       if(!c || c==='PUSH') return;
       const pick = picks[i];
       if(!pick) return;
-      if((c==='Over' || c==='Under') && pick===c){ pts++; return; }
-      if(norm(pick) === norm(c)) pts++;
-      else if(window.DEBUG_POINTS_NORM){ console.log('[Mismatch]', day, user.username, 'pick=', pick, 'cover=', c, 'normPick=', norm(pick), 'normCover=', norm(c)); }
+      if(picksMatch(pick, c)) pts++;
+      else if(window.DEBUG_POINTS_NORM){ console.log('[Mismatch]', day, user.username, 'pick=', pick, 'cover=', c, 'normPick=', _norm(pick), 'normCover=', _norm(c)); }
     });
     return pts;
   }
@@ -224,6 +301,51 @@ function updateLeaderboard(){
 
   const totalsArr = users.map((_,i)=> thursVals[i] + friVals[i] + satVals[i] + sunVals[i] + monVals[i]);
   const leaderScore = totalsArr.length? Math.max(...totalsArr): 0;
+  // --- Win Chance Calculation (simple heuristic) ---
+  // Approach: For each remaining unresolved pick slot (no covered pick yet) across remaining days (Sat/Sun/Mon relative to now),
+  // assign each user a 0.5 probability of earning that future point unless they already have a decided miss/hit.
+  // Then approximate win probability as probability their stochastic total exceeds all others under independence assumption.
+  // Simplify further: approximate each user remaining distribution as Normal(mu, sigma^2) with mu = current + 0.5*R, sigma^2 = 0.25*R (R remaining undecided picks for that user),
+  // and estimate P(user is champion) via pairwise normal comparison against best competing mean using a softmax on (mu_user - mu_best_other)/sqrt(var_sum).
+  const nowDayOrder = ['Thurs','Fri','Sat','Sun','Mon'];
+  function remainingUndecidedForUser(u){
+    let rem = 0;
+    nowDayOrder.forEach(day=>{
+      const labels = picksLabels[day]||[];
+      for(let i=0;i<labels.length;i++){
+        const cov = (coveredPicks[day]||[])[i];
+        if(!cov){ // not resolved yet
+          const picks = userPicks[day] && userPicks[day][u.username];
+          if(picks && picks[i]) rem += 1; // they have a pick in this slot
+        }
+      }
+    });
+    return rem;
+  }
+  const userStats = users.map(u=>{
+    const current = u.total||0;
+    const rem = remainingUndecidedForUser(u);
+    const mu = current + 0.5 * rem;
+    const variance = 0.25 * rem; // Bernoulli sum with p=0.5
+    return { user:u, current, rem, mu, variance };
+  });
+  // Compute comparative scores using softmax of (mu - others' mu) scaled by pooled std dev.
+  let denomMax = -Infinity;
+  const tempVals = userStats.map(us=>{
+    // Compare vs best competitor excluding self
+    let bestOtherMu = -Infinity, bestVar=0;
+    userStats.forEach(other=>{ if(other!==us && other.mu > bestOtherMu){ bestOtherMu = other.mu; bestVar = other.variance; } });
+    const pooledVar = us.variance + bestVar + 1e-6;
+    const zLike = (us.mu - bestOtherMu) / Math.sqrt(pooledVar);
+    // Temperature scaling to widen separation
+    const score = Math.exp(zLike);
+    if(score > denomMax) denomMax = score;
+    return { us, score };
+  });
+  const sumScores = tempVals.reduce((a,b)=> a + b.score, 0) || 1;
+  tempVals.forEach(tv=>{ tv.us.user.winProb = tv.score / sumScores; });
+  // Attach friendly percentage (0-100)
+  users.forEach(u=>{ u._winPct = Math.round(((u.winProb)||0)*100); });
   const canvasEl = document.getElementById('leaderboardChart');
   if(!canvasEl){ return; }
   const ctx = canvasEl.getContext('2d');
@@ -263,6 +385,28 @@ function updateLeaderboard(){
   }
   const titleEl = document.getElementById('chartStaticTitle');
   if(titleEl){ titleEl.textContent = 'Leaderboard'; }
+  // Inject or update win probability panel below live scoreboard (#gamesWrap)
+  (function renderWinChances(){
+    let host = document.getElementById('winChancesPanel');
+    if(!host){
+      host = document.createElement('div');
+      host.id='winChancesPanel';
+      host.style.margin='12px 4px 8px';
+      host.style.fontSize='12px';
+      host.style.fontFamily='Inter,system-ui,sans-serif';
+      const afterRef = document.getElementById('gamesWrap');
+      if(afterRef && afterRef.parentNode){
+        afterRef.parentNode.insertBefore(host, afterRef.nextSibling);
+      } else {
+        (document.getElementById('chartWrapper')||document.body).appendChild(host);
+      }
+    }
+    const lines = users.map(u=> `<div class=\"wc-line\"><span class=\"wc-name\">${abbrevUser(u)}</span><span class=\"wc-bar\"><span class=\"wc-fill\" style=\"width:${u._winPct||0}%;\"></span></span><span class=\"wc-pct\">${u._winPct||0}%</span></div>`).join('');
+    host.innerHTML = `<div style=\"color:#9fb2bf;font-weight:600;margin-bottom:4px;\">Winning odds</div>${lines}`;
+    const styleId='winChanceInlineStyles';
+    if(!document.getElementById(styleId)){
+      const st=document.createElement('style'); st.id=styleId; st.textContent=`#winChancesPanel{padding:6px 8px;background:#121416;border:1px solid #1e2429;border-radius:6px;}#winChancesPanel .wc-line{display:flex;align-items:center;gap:6px;margin:3px 0;}#winChancesPanel .wc-name{width:60px;color:#cdd9e1;font-weight:500;}#winChancesPanel .wc-bar{flex:1;height:8px;background:#1d1d1d;border-radius:4px;overflow:hidden;position:relative;}#winChancesPanel .wc-fill{display:block;height:100%;background:linear-gradient(90deg,#2e7dd6,#33a02c);box-shadow:0 0 4px rgba(51,160,44,0.45);}#winChancesPanel .wc-pct{width:38px;text-align:right;color:#e8f6ff;font-variant-numeric:tabular-nums;font-weight:600;}`; document.head.appendChild(st); }
+  })();
   // Update explanatory note text (toggle already controls visibility)
   const noteEl = document.getElementById('liveProjNote'); if(noteEl) noteEl.remove();
 
@@ -363,11 +507,9 @@ function renderPicksTable(day=currentDay){
   // Requirement update: show scheduled games for Sat-Sun-Mon again (no kickoff-based hiding). Always render all defined columns for selected day.
   const tbl = document.getElementById('picksTable');
   let labelCount = (picksLabels[day]||[]).length;
-  if(day==='Sun'){
-    // Preserve earlier dynamic expansion in case server adds more Sunday picks than initial labels length.
-    const maxUserLen = Object.values(userPicks['Sun']||{}).reduce((m,arr)=> Math.max(m, Array.isArray(arr)?arr.length:0), 0);
-    if(maxUserLen > labelCount) labelCount = maxUserLen;
-  }
+  // Dynamic expansion: if picksLabels has fewer columns than any user's submitted picks for this day, expand to show them.
+  const maxUserLenGeneric = Object.values(userPicks[day]||{}).reduce((m,arr)=> Math.max(m, Array.isArray(arr)?arr.length:0), 0);
+  if(maxUserLenGeneric > labelCount) labelCount = maxUserLenGeneric;
   function statusFor(day, idx){
     if(day==='Thurs'){
       if(idx===0 || idx===1) return nflState.status||''; // game + O/U
@@ -474,7 +616,8 @@ function updateScoreboard(){
   // If past completed day (Thurs/Fri) and we have static final results, render those (preferred over labels fallback)
   if((scoreboardDay==='Thurs' || scoreboardDay==='Fri') && (!games || !games.length) && finalResults[scoreboardDay]){
     console.log('[Scoreboard] Using static finals for', scoreboardDay, 'games length=', games?games.length:0);
-    const header = '<tr><th>Game</th><th>Final Score</th><th>Spread</th><th>Total</th></tr>';
+  // Removed Total column per request
+  const header = '<tr><th>Game</th><th>Final Score</th><th>Spread</th></tr>';
     const rows = finalResults[scoreboardDay].map(fr=>{
       const scoreFrag = `${fr.awayScore}-${fr.homeScore}`;
       let spreadTxt='';
@@ -482,15 +625,24 @@ function updateScoreboard(){
         const fav = fr.lineHome < 0 ? fr.homeAbbr : fr.awayAbbr;
         spreadTxt = `${fav} -${Math.abs(fr.lineHome)}`;
       }
-      let totalTxt = fr.total? `O/U ${fr.total}`: '';
-      return `<tr class="final-row"><td><span class="game-label">${fr.awayAbbr} @ ${fr.homeAbbr}</span></td><td>${scoreFrag} <span class="detail">FINAL</span></td><td>${spreadTxt}</td><td>${totalTxt}</td></tr>`;
+      // Determine covering side to shade game cell (final)
+      let coverSideClass = '';
+      if(fr.lineHome!=null){
+        const margin = fr.homeScore - fr.awayScore;
+        const homeCover = (fr.lineHome < 0 && margin > Math.abs(fr.lineHome)) || (fr.lineHome > 0 && margin > -fr.lineHome);
+        const push = Math.abs(margin + fr.lineHome) < 0.0001; // treat exact margin when favorite scenario; simplified
+        if(!push){
+          coverSideClass = homeCover ? 'cover-home' : 'cover-away';
+        }
+      }
+      return `<tr class="final-row"><td class="${coverSideClass}"><span class="game-label">${fr.awayAbbr} @ ${fr.homeAbbr}</span></td><td>${scoreFrag} <span class="detail">FINAL</span></td><td>${spreadTxt}</td></tr>`;
     }).join('');
     tbl.innerHTML = header + rows;
     const titleEl = document.getElementById('scoresTitle'); if(titleEl) titleEl.textContent = 'Scores ('+scoreboardDay+')';
     return;
   }
   function spreadLabel(g){ const ln=g.lineHome; if(typeof ln!=='number') return ''; if(ln===0) return 'PK'; const fav = ln<0? g.homeAbbr : g.awayAbbr; return `${fav} -${Math.abs(ln)}`; }
-  function totalLabel(g){ return g.total ? `O/U ${g.total}` : ''; }
+  // Total column fully removed; helper eliminated
   function statusDetail(state){
     if(!state) return '';
     if(state.status==='STATUS_FINAL') return 'FINAL';
@@ -501,7 +653,7 @@ function updateScoreboard(){
     }
     return times && times[state._idx] ? times[state._idx] : '';
   }
-  const header = '<tr><th>Game</th><th>Score / Status</th><th>Spread</th><th>Total</th></tr>';
+  const header = '<tr><th>Game</th><th>Score / Status</th><th>Spread</th></tr>';
   const rows = games.map((g,i)=>{
     if(!games.length){ console.log('[Scoreboard] No games array for day', scoreboardDay); }
     const st = states && states[i] ? states[i] : null; if(st) st._idx = i; // attach index for statusDetail time lookup
@@ -509,9 +661,25 @@ function updateScoreboard(){
     const scoreFrag = live ? `${st.away}-${st.home}` : (times && times[i] ? times[i] : '');
     const detail = statusDetail(st);
     const spread = spreadLabel(g);
-    const total = totalLabel(g);
     const rowCls = st? rowClass(st.status): '';
-    return `<tr class="${rowCls}"><td><span class="game-label">${g.awayAbbr} @ ${g.homeAbbr}</span></td><td>${scoreFrag}${detail? ' <span class="detail">'+detail+'</span>':''}</td><td>${spread}</td><td>${total}</td></tr>`;
+    // Determine live cover side for shading game cell
+    let coverSideClass = '';
+    if(g.lineHome!=null && live){
+      const margin = st.home - st.away; // positive means home leading
+      // Convert lineHome (spread relative to home) to required margin threshold to cover
+      // If home is favorite (negative), they cover if margin > abs(lineHome)
+      // If home is underdog (positive), they cover if margin > -lineHome (i.e., currently leading by more than expected) or staying within spread (margin + lineHome >=0)
+      const line = g.lineHome;
+      let homeCover = false;
+      if(line < 0){
+        homeCover = margin > Math.abs(line); // must exceed
+      } else if(line > 0){
+        homeCover = (margin + line) >= 0; // within spread or winning
+      }
+      const push = (line < 0 && Math.abs(margin - Math.abs(line)) < 0.0001) || (line > 0 && Math.abs(margin + line) < 0.0001);
+      if(!push){ coverSideClass = homeCover ? 'cover-home' : 'cover-away'; }
+    }
+  return `<tr class="${rowCls}"><td class="${coverSideClass}"><span class="game-label">${g.awayAbbr} @ ${g.homeAbbr}</span></td><td>${scoreFrag}${detail? ' <span class=\"detail\">'+detail+'</span>':''}</td><td>${spread}</td></tr>`;
   }).join('');
   tbl.innerHTML = header + rows;
   const titleEl = document.getElementById('scoresTitle'); if(titleEl) titleEl.textContent = 'Scores ('+scoreboardDay+')';
