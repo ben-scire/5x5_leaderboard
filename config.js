@@ -159,7 +159,17 @@ const coveredPicks = {
   // Saturday winners aligned to labels: [Texas-6.5, Boise+19.5, UVA+6.5, Vanderbilt+10.5, TTU-12.5, Miss St +14.5, Miami -4.5]
   // Inserted missing UVA (third slot). Adjust others accordingly if real outcomes differ.
   'Sat':['Texas Tech','Florida','UVA','Notre Dame','Texas A&M','Alabama','Miami'], // Adjusted to 7 entries.
-  'Sun':[], 'Mon':[]
+  // Sunday NFL ATS winners in label order:
+  // Labels:
+  // 1. Houston -1.5 @ Baltimore  => Houston covered (won outright big)
+  // 2. Dallas -1.5 @ New York Jets => Dallas covered (win margin > 1.5)
+  // 3. Denver +4.5 @ Philadelphia => Denver covered (won outright 21-17)
+  // 4. Miami -1.5 @ Carolina => Carolina covered (Carolina 27-21 as home dog)
+  // 5. Tampa Bay +3.5 @ Seattle => Tampa Bay covered (won 38-35 as +3.5 dog)
+  // 6. Washington Commanders -2.5 @ Los Angeles Chargers => Washington covered (won 27-10 laying 2.5)
+  // 7. Detroit Lions -9.5 @ Cincinnati Bengals => Detroit covered (won 37-24, margin 13)
+  // 8. New England Patriots +7.5 @ Buffalo Bills => New England covered (won 23-20 as +7.5 dog)
+  'Sun':['HOU','DAL','DEN','CAR','TB','WSH','DET','NE'], 'Mon':[]
 };
 
 // New week initial day defaults (Thursday completed, focusing on Friday)
