@@ -1,0 +1,230 @@
+{
+  "version": 1,
+  "days": {
+    "Thu": {
+      "games": [
+        {
+          "eventId": null,
+          "sport": "NFL",
+          "away": "San Fransisco 49ers",
+          "home": "Los Angelas Rams",
+          "awayAbbr": "SF",
+          "homeAbbr": "LAR",
+          "lineHome": null,
+          "total": null,
+          "start": "",
+          "date": "2025-10-09",
+          "startIso": null
+        },
+        {
+          "eventId": null,
+          "sport": "NFL",
+          "away": "San Fransisco 49ers",
+          "home": "Los Angelas Rams",
+          "awayAbbr": "SF",
+          "homeAbbr": "LAR",
+          "lineHome": 8.5,
+          "total": null,
+          "start": "",
+          "date": "2025-10-09",
+          "startIso": null
+        },
+        {
+          "eventId": null,
+          "sport": "MLB",
+          "away": "Boston Red Sox",
+          "home": "New York Yankees",
+          "awayAbbr": "BOS",
+          "homeAbbr": "NYY",
+          "lineHome": 0.5,
+          "total": null,
+          "start": "",
+          "date": "2025-10-09",
+          "startIso": null
+        }
+      ],
+      "picks": [
+        {
+          "type": "SPREAD",
+          "gameIndex": 1,
+          "label": "SF @ LAR +8.5",
+          "result": "SF"
+        },
+        {
+          "type": "SPREAD",
+          "gameIndex": 2,
+          "label": "BOS @ NYY +0.5",
+          "result": "NYY"
+        }
+      ]
+    },
+    "Fri": {
+      "games": [
+        {
+          "eventId": null,
+          "sport": "NCAAF",
+          "away": "WVU",
+          "home": "BYU",
+          "awayAbbr": "WVU",
+          "homeAbbr": "BYU",
+          "lineHome": 18.5,
+          "total": null,
+          "start": "",
+          "date": "2025-10-10",
+          "startIso": null
+        }
+      ],
+      "picks": [
+        {
+          "type": "SPREAD",
+          "gameIndex": 0,
+          "label": "WVU @ BYU +18.5",
+          "result": "WVU"
+        }
+      ]
+    },
+    "Sat": {
+      "games": [
+        {
+          "eventId": null,
+          "sport": "NCAAF",
+          "away": "Texas Tech",
+          "home": "Houston",
+          "awayAbbr": "TTU",
+          "homeAbbr": "UH",
+          "lineHome": -12.5,
+          "total": null,
+          "start": "",
+          "date": "2025-10-11",
+          "startIso": null
+        },
+        {
+          "eventId": null,
+          "sport": "NCAAF",
+          "away": "Texas",
+          "home": "Florida",
+          "awayAbbr": "UT",
+          "homeAbbr": "FLA",
+          "lineHome": -6.5,
+          "total": null,
+          "start": "",
+          "date": "2025-10-11",
+          "startIso": null
+        },
+        {
+          "eventId": null,
+          "sport": "NCAAF",
+          "away": "Boise St",
+          "home": "Notre Dame",
+          "awayAbbr": "Boise",
+          "homeAbbr": "ND",
+          "lineHome": 19.5,
+          "total": null,
+          "start": "",
+          "date": "2025-10-11",
+          "startIso": null
+        },
+        {
+          "eventId": null,
+          "sport": "NCAAF",
+          "away": "Virginia",
+          "home": "Louissville",
+          "awayAbbr": "UVA",
+          "homeAbbr": "LOU",
+          "lineHome": 6.5,
+          "total": null,
+          "start": "",
+          "date": "2025-10-11",
+          "startIso": null
+        },
+        {
+          "eventId": null,
+          "sport": "NCAAF",
+          "away": "Vanderbilt",
+          "home": "Alabama",
+          "awayAbbr": "Vandy",
+          "homeAbbr": "Bama",
+          "lineHome": 10.5,
+          "total": null,
+          "start": "",
+          "date": "2025-10-11",
+          "startIso": null
+        },
+        {
+          "eventId": null,
+          "sport": "NCAAF",
+          "away": "Mississippi St",
+          "home": "Texas A&M",
+          "awayAbbr": "Miss",
+          "homeAbbr": "A&M",
+          "lineHome": 14.5,
+          "total": null,
+          "start": "",
+          "date": "2025-10-11",
+          "startIso": null
+        },
+        {
+          "eventId": null,
+          "sport": "NCAAF",
+          "away": "Miami",
+          "home": "Florida St",
+          "awayAbbr": "MIA",
+          "homeAbbr": "FSU",
+          "lineHome": -4.5,
+          "total": null,
+          "start": "",
+          "date": "2025-10-11",
+          "startIso": null
+        }
+      ],
+      "picks": [
+        {
+          "type": "SPREAD",
+          "gameIndex": 0,
+          "label": "TTU @ UH -12.5",
+          "result": "TTU"
+        },
+        {
+          "type": "SPREAD",
+          "gameIndex": 1,
+          "label": "UT @ FLA -6.5",
+          "result": "FLA"
+        },
+        {
+          "type": "SPREAD",
+          "gameIndex": 2,
+          "label": "Boise @ ND +19.5",
+          "result": "ND"
+        },
+        {
+          "type": "SPREAD",
+          "gameIndex": 3,
+          "label": "UVA @ LOU +6.5",
+          "result": "UVA"
+        },
+        {
+          "type": "SPREAD",
+          "gameIndex": 4,
+          "label": "Vandy @ Bama +10.5",
+          "result": "Bama"
+        },
+        {
+          "type": "SPREAD",
+          "gameIndex": 5,
+          "label": "Miss @ A&M +14.5",
+          "result": "A&M"
+        },
+        {
+          "type": "SPREAD",
+          "gameIndex": 6,
+          "label": "MIA @ FSU -4.5",
+          "result": "MIA"
+        }
+      ]
+    },
+    "Sun": {
+      "games": [],
+      "picks": []
+    }
+  }
+}

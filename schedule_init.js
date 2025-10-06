@@ -3,6 +3,10 @@
 // Must be loaded BEFORE leaderboard.js.
 
 (async function loadScheduleAndInit(){
+  if(typeof window!=='undefined' && window.LIVE_FETCH_ENABLED===false){
+    console.log('[ScheduleInit] LIVE_FETCH_ENABLED=false; skipping schedule/picks fetch.');
+    return;
+  }
   try {
     const resp = await fetch('/api/schedule');
     if(!resp.ok){ console.warn('[ScheduleInit] Failed schedule fetch', resp.status); return; }
@@ -54,7 +58,8 @@
     ['Fri','Sat','Sun','Mon'].forEach(d=>{ if(!Array.isArray(coveredPicks[d])) coveredPicks[d] = Array((picksLabels[d]||[]).length).fill(null); });
 
     // Fetch public picks for each active day (except Thurs locked) to hydrate scoring early
-    await Promise.all(['Fri','Sat','Sun','Mon'].map(async day=>{
+    if(typeof window==='undefined' || window.LIVE_FETCH_ENABLED!==false){
+      await Promise.all(['Fri','Sat','Sun','Mon'].map(async day=>{
       if(!(picksLabels[day]||[]).length) return;
       try {
         const r = await fetch('/api/picks/public?day='+day);
@@ -70,7 +75,8 @@
             userPicks[day][email] = adj;
         });
       } catch(e){ console.warn('[ScheduleInit] public picks load failed', day, e); }
-    }));
+      }));
+    }
 
     console.log('[ScheduleInit] Loaded schedule version', payload.version, 'days:', Object.keys(days));
   } catch(err){ console.warn('[ScheduleInit] Fatal error', err); }

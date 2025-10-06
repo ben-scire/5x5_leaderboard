@@ -61,6 +61,7 @@
 
   async function fetchDayPicks(day){
     if(!state.token) return;
+    if(typeof window!=='undefined' && window.LIVE_FETCH_ENABLED===false) { setSaveStatus('Live fetching disabled'); return; }
     try{
       const res = await fetch('/api/picks/get?day='+encodeURIComponent(day), { headers: bearerHeaders() });
       const data = await res.json();
@@ -225,6 +226,7 @@
   // Try silent auth with existing token (validate by fetching first day once schedule ready)
   async function attemptTokenReuse(){
     if(!state.token) return;
+    if(typeof window!=='undefined' && window.LIVE_FETCH_ENABLED===false) return;
     try {
       const res = await fetch('/api/auth/status', { headers: bearerHeaders() });
       const data = await res.json();
@@ -266,6 +268,8 @@
       });
     } catch(e){ /* ignore */ }
   }
-  setInterval(pollCountdowns, 15000); // every 15 seconds
-  setTimeout(pollCountdowns, 5000);
+  if(typeof window==='undefined' || window.LIVE_FETCH_ENABLED!==false){
+    setInterval(pollCountdowns, 15000); // every 15 seconds
+    setTimeout(pollCountdowns, 5000);
+  }
 })();

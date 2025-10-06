@@ -101,9 +101,13 @@
     renderLeaderboardChart();
   }
 
-  // Kick off periodic refresh (more frequent early in game windows)
-  setInterval(refresh, 20000); // 20s
-  refresh();
+  // Kick off periodic refresh only when live fetching is enabled
+  if(typeof window==='undefined' || window.LIVE_FETCH_ENABLED!==false){
+    setInterval(refresh, 20000); // 20s
+    refresh();
+  } else {
+    console.log('[live] LIVE_FETCH_ENABLED=false; live polling disabled.');
+  }
 
   // Optional admin submissions monitor (adds a small fetch link if user is admin after they manually set a token in localStorage)
   (function(){

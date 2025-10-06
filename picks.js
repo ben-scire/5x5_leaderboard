@@ -18,6 +18,7 @@
     if(!res.ok) throw (j&&j.error)||res.statusText; return j; }
 
   async function login(create){
+    if(typeof window!=='undefined' && window.LIVE_FETCH_ENABLED===false){ setStatus('authStatus','Live fetching disabled'); return; }
     const e=$('email').value.trim().toLowerCase(); const p=$('password').value.trim();
     if(!e||!p){ setStatus('authStatus','Email & password required'); return; }
     setStatus('authStatus', create?'Creating...':'Logging in...', true);
@@ -66,6 +67,7 @@
   }
 
   async function saveAll(){
+    if(typeof window!=='undefined' && window.LIVE_FETCH_ENABLED===false){ setStatus('saveStatus','Live fetching disabled'); return; }
     setStatus('saveStatus','Saving...', true);
     try {
       // Group inputs by day, reconstruct full pick arrays (keeping existing picks for earlier indices) while filling only new ones.
@@ -92,6 +94,7 @@
   }
 
   async function loadData(){
+    if(typeof window!=='undefined' && window.LIVE_FETCH_ENABLED===false){ setStatus('saveStatus','Live fetching disabled'); return; }
     try {
       const sched = await api(SCHEDULE_URL); schedule = (sched.schedule)||sched;
       const picksResp = await api(GET_URL + '?email=' + encodeURIComponent(email));

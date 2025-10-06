@@ -97,6 +97,11 @@ function _norm(raw){
   s = s.replace(/mia\b/,'miami');
   s = s.replace(/fsu/g,'florida state');
   s = s.replace(/florida st/g,'florida state');
+  // Normalize Washington Commanders variants (some users used WASH, others WSH; covers use WSH)
+  if(/^wsh$/.test(s)) s = 'wash';
+  if(/^wash$/.test(s)) s = 'wash';
+  if(/^washington commanders?$/.test(s)) s = 'wash';
+  if(/^washington$/.test(s)) s = 'wash';
   // Collapse whitespace
   s = s.replace(/ +/g,' ').trim();
   return s;
@@ -301,51 +306,22 @@ function updateLeaderboard(){
 
   const totalsArr = users.map((_,i)=> thursVals[i] + friVals[i] + satVals[i] + sunVals[i] + monVals[i]);
   const leaderScore = totalsArr.length? Math.max(...totalsArr): 0;
-  // --- Win Chance Calculation (simple heuristic) ---
-  // Approach: For each remaining unresolved pick slot (no covered pick yet) across remaining days (Sat/Sun/Mon relative to now),
-  // assign each user a 0.5 probability of earning that future point unless they already have a decided miss/hit.
-  // Then approximate win probability as probability their stochastic total exceeds all others under independence assumption.
-  // Simplify further: approximate each user remaining distribution as Normal(mu, sigma^2) with mu = current + 0.5*R, sigma^2 = 0.25*R (R remaining undecided picks for that user),
-  // and estimate P(user is champion) via pairwise normal comparison against best competing mean using a softmax on (mu_user - mu_best_other)/sqrt(var_sum).
-  const nowDayOrder = ['Thurs','Fri','Sat','Sun','Mon'];
-  function remainingUndecidedForUser(u){
-    let rem = 0;
-    nowDayOrder.forEach(day=>{
-      const labels = picksLabels[day]||[];
-      for(let i=0;i<labels.length;i++){
-        const cov = (coveredPicks[day]||[])[i];
-        if(!cov){ // not resolved yet
-          const picks = userPicks[day] && userPicks[day][u.username];
-          if(picks && picks[i]) rem += 1; // they have a pick in this slot
-        }
-      }
-    });
-    return rem;
-  }
-  const userStats = users.map(u=>{
-    const current = u.total||0;
-    const rem = remainingUndecidedForUser(u);
-    const mu = current + 0.5 * rem;
-    const variance = 0.25 * rem; // Bernoulli sum with p=0.5
-    return { user:u, current, rem, mu, variance };
+  // --- Simplified Win Chance Calculation (linear 25%-75% band) ---
+  // Use only currently locked (scored) total points. Ignore unresolved/live variance.
+  // Let minLocked = lowest total, maxLocked = highest total among users.
+  // Each user's raw position r = (locked - minLocked)/(maxLocked - minLocked) in [0,1].
+  // Map to probability p = 0.25 + 0.50 * r => stays within [25%,75%].
+  // If everyone tied (range 0) -> all get 50%.
+  const lockedTotals = users.map(u=> u.total||0);
+  const minLocked = Math.min(...lockedTotals);
+  const maxLocked = Math.max(...lockedTotals);
+  const range = Math.max(1, maxLocked - minLocked); // avoid divide by zero
+  users.forEach(u=>{
+    const r = ( (u.total||0) - minLocked ) / range; // 0..1
+    const p = 0.25 + 0.50 * r; // 0.25..0.75
+    u._winPct = Math.round(p * 100);
   });
-  // Compute comparative scores using softmax of (mu - others' mu) scaled by pooled std dev.
-  let denomMax = -Infinity;
-  const tempVals = userStats.map(us=>{
-    // Compare vs best competitor excluding self
-    let bestOtherMu = -Infinity, bestVar=0;
-    userStats.forEach(other=>{ if(other!==us && other.mu > bestOtherMu){ bestOtherMu = other.mu; bestVar = other.variance; } });
-    const pooledVar = us.variance + bestVar + 1e-6;
-    const zLike = (us.mu - bestOtherMu) / Math.sqrt(pooledVar);
-    // Temperature scaling to widen separation
-    const score = Math.exp(zLike);
-    if(score > denomMax) denomMax = score;
-    return { us, score };
-  });
-  const sumScores = tempVals.reduce((a,b)=> a + b.score, 0) || 1;
-  tempVals.forEach(tv=>{ tv.us.user.winProb = tv.score / sumScores; });
-  // Attach friendly percentage (0-100)
-  users.forEach(u=>{ u._winPct = Math.round(((u.winProb)||0)*100); });
+  // (Previous complex probability model removed for simplicity.)
   const canvasEl = document.getElementById('leaderboardChart');
   if(!canvasEl){ return; }
   const ctx = canvasEl.getContext('2d');
@@ -538,36 +514,18 @@ function renderPicksTable(day=currentDay){
   const rows = users.map(u=>{
     const picks = userPicks[day] && userPicks[day][u.username] || [];
     const tds = indices.map(i=>{
-      let rawPick = picks[i] || '-';
+      const rawPick = picks[i] || '-';
       const displayPick = lookupAbbr(rawPick);
-  const cov = coveredPicks[day][i];
-  let cls='';
-  if(cov){
-    const normPick = (rawPick||'').toString().trim().toLowerCase();
-    const normCov = cov.toString().trim().toLowerCase();
-    if(cov==='PUSH') cls='push';
-    else if(normPick && normCov && normPick === normCov) cls='hit';
-    else if(normPick && normCov && normPick !== normCov) cls='miss';
-  }
-      // Live covering effect (only if not final yet and no hit/miss assigned)
-        if(!cov){
-          // Determine if this column represents a total (Over/Under) where we suppress live shading
-          const isTotalCol = (
-            (day==='Thurs' && i===1) || // Thursday NFL total
-            (day==='Mon' && (i===1 || i===3)) // Monday totals TB/HOU & LAC/LVR
-          );
-          if(!isTotalCol){
-            const info = liveGameCoverInfo(day,i);
-            if(info && info.coverAbbr){
-              const pct = Math.round(info.progress*100);
-              if(info.coverAbbr === displayPick){
-                return `<td class="${cls} picks-cell-live covering" style="--fill:${pct}%">${displayPick}</td>`;
-              } else if(rawPick && rawPick !== '-') {
-                return `<td class="${cls} picks-cell-live trailing" style="--fill:${pct}%">${displayPick}</td>`;
-              }
-            }
-          }
+      const cov = (coveredPicks[day]||[])[i];
+      let cls='';
+      if(cov){ // finalized
+        if(cov==='PUSH') cls='push';
+        else {
+          // Use normalization-aware comparison (same as scoring) so synonyms (WSH/WASH, etc.) match
+          if(picksMatch(rawPick, cov)) cls='hit';
+          else if(rawPick && rawPick!=='-') cls='miss';
         }
+      }
       return `<td class="${cls}">${displayPick}</td>`;
     }).join('');
     return `<tr><td>${abbrevUser(u)}</td>${tds}</tr>`;
@@ -876,167 +834,25 @@ window.addEventListener('load', async () => {
   const noteInit = document.getElementById('liveProjNote'); if(noteInit) noteInit.style.display='inline';
   updateLeaderboard();
   picksDay=initialDay; scoreboardDay=initialDay; if(window.__renderDayToggle) window.__renderDayToggle(); renderPicksTable(picksDay); const stEl=document.getElementById('scoresTitle'); if(stEl) stEl.textContent='Scores ('+initialDay+')';
-  await Promise.all([
-    updateNFLGame().catch(e=>console.warn('NFL init fetch failed', e)),
-    updateCollegeGame().catch(e=>console.warn('CFB Thurs init fetch failed', e)),
-    updateFridayGames().catch(e=>console.warn('Friday init fetch failed', e)),
-    (async()=>{ await resolveSaturdayEventIds(); await updateSaturdayGames(); })().catch(e=>console.warn('Saturday init fetch failed', e)),
-  updateSundayGames().catch(e=>console.warn('Sunday init fetch failed', e)),
-  updateMondayGames().catch(e=>console.warn('Monday init fetch failed', e)),
-    (async()=>{
-      // Ingest Sunday picks from server if available; structure: { email: { picks: [...], ts } }
-      try {
-        const resp = await fetch('/picks/sunday/public');
-        if(resp.ok){
-          const data = await resp.json();
-          Object.keys(data).forEach(email=>{
-            const entry = data[email];
-            if(!entry || !Array.isArray(entry.picks)) return;
-            let picksArr = entry.picks.map(p=> normalizeNFLAbbr(p || ''));
-            // Pad / trim to exactly 9
-            if(picksArr.length < (picksLabels['Sun']||[]).length){
-              picksArr = picksArr.concat(Array((picksLabels['Sun']||[]).length - picksArr.length).fill(''));
-            } else if(picksArr.length > (picksLabels['Sun']||[]).length){
-              picksArr = picksArr.slice(0,(picksLabels['Sun']||[]).length);
-            }
-            userPicks['Sun'][email] = picksArr; // always overwrite to keep freshest
-          });
-          // NOTE: Future (not-started) games remain hidden in table by gating logic above; when kickoff passes renderPicksTable will expose those columns.
-          const loadedCount = Object.keys(data).length;
-          if(loadedCount===0){ console.warn('[SundayIngest] /picks/sunday/public returned 0 entries'); }
-          recalcPoints('Sun'); recalcTotal(); updateLeaderboard(); if(picksDay==='Sun') renderPicksTable('Sun');
-        } else {
-          console.warn('[SundayIngest] public endpoint status', resp.status);
-        }
-      } catch(err){ console.warn('Failed to ingest Sunday picks', err); }
-      // Fallback: if still no picks loaded, attempt static JSON file (Flask writes data/sunday_picks.json)
-      try {
-        if(Object.keys(userPicks['Sun']||{}).length===0){
-          const alt = await fetch('/data/sunday_picks.json');
-          if(alt.ok){
-            const list = await alt.json();
-            if(Array.isArray(list)){
-              list.forEach(rec=>{
-                if(!rec || !rec.email || !Array.isArray(rec.picks)) return;
-                let arr = rec.picks.map(p=> normalizeNFLAbbr(p||''));
-                if(arr.length < (picksLabels['Sun']||[]).length){ arr = arr.concat(Array((picksLabels['Sun']||[]).length-arr.length).fill('')); }
-                userPicks['Sun'][rec.email] = arr;
-              });
-              console.log('[SundayIngest] Loaded fallback static sunday_picks.json');
-              recalcPoints('Sun'); recalcTotal(); updateLeaderboard(); if(picksDay==='Sun') renderPicksTable('Sun');
-            }
-          }
-        }
-      } catch(e){ console.warn('Fallback sunday_picks.json fetch failed', e); }
-    })(),
-    updateMondayGames().catch(e=>console.warn('Monday init fetch failed', e)),
-    (async()=>{
-      // Ingest official Monday picks from CSV-backed endpoint
-      try {
-        const resp = await fetch('/picks/monday/official');
-        if(resp.ok){
-          const payload = await resp.json();
-          const entries = (payload && payload.entries) || {};
-          Object.keys(entries).forEach(email=>{
-            const entry = entries[email];
-            if(!entry || !Array.isArray(entry.picks)) return;
-            let arr = entry.picks.map(p=> p || '');
-            // Normalize Over/Under case and team abbreviations
-            arr = arr.map(v=> v==='OVER'?'Over': v==='UNDER'?'Under': normalizeNFLAbbr(v));
-            // Pad/trim to exactly 4 Monday picks
-            if(arr.length < (picksLabels['Mon']||[]).length){
-              arr = arr.concat(Array((picksLabels['Mon']||[]).length - arr.length).fill(''));
-            } else if(arr.length > (picksLabels['Mon']||[]).length){
-              arr = arr.slice(0,(picksLabels['Mon']||[]).length);
-            }
-            userPicks['Mon'][email] = arr;
-          });
-          // Ensure Nick (finsmaniac...) present even if NA provided server-side fallback (mirrors server logic)
-          if(!userPicks['Mon']['finsmaniac1551@gmail.com']){
-            userPicks['Mon']['finsmaniac1551@gmail.com'] = Array((picksLabels['Mon']||[]).length).fill('');
-          }
-          recalcPoints('Mon'); recalcTotal(); updateLeaderboard(); if(picksDay==='Mon') renderPicksTable('Mon');
-        } else {
-          console.warn('[MondayIngest] official endpoint status', resp.status);
-        }
-      } catch(err){ console.warn('Failed to ingest Monday official picks', err); }
-      // Client-side fallback: directly parse raw CSV if user picks still missing or partially empty
-      try {
-        const needed = (picksLabels['Mon']||[]).length;
-        // Determine completeness: every known user has an array of length 4 with at least one non-empty value
-        const allUserEmails = (window._lbConfig && Array.isArray(window._lbConfig.users)? window._lbConfig.users.map(u=>u.username): (users||[]).map(u=>u.username));
-        const mondayMap = userPicks['Mon'] || {};
-        const missing = allUserEmails.some(em=> !Array.isArray(mondayMap[em]) || mondayMap[em].length!==needed || mondayMap[em].every(v=>!v));
-        if(missing){
-          const csvResp = await fetch('/09_15_Picks.csv');
-          if(csvResp.ok){
-            const text = await csvResp.text();
-            const lines = text.split(/\r?\n/).filter(l=>l.trim().length>0);
-            if(lines.length>1){
-              const rawHeader = lines[0];
-              // Split preserving commas inside quotes (not expected here, but future-proof lightly)
-              const headerParts = rawHeader.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(h=>h.replace(/"/g,'').trim());
-              const lower = headerParts.map(h=>h.toLowerCase());
-              const emailIdx = lower.findIndex(h=> h.includes('username') || h.includes('email'));
-              // Flexible detection: first column referencing TB & HOU & spread; second referencing O/U (TB/HOU); third referencing LAC & LVR; fourth O/U for LAC/LVR
-              function colMatch(fn){ return lower.findIndex(fn); }
-              const col1 = colMatch(h=> h.includes('tb') && h.includes('hou') && (h.includes('+') || h.includes('-') || h.includes('@')) && !h.includes('o/u')); // spread TB @ HOU
-              const col2 = colMatch(h=> h.includes('tb') && h.includes('hou') && (h.includes('o/u') || h.includes('over'))); // total TB/HOU
-              const col3 = colMatch(h=> h.includes('lac') && (h.includes('lvr') || h.includes('lv')) && !h.includes('o/u') && (h.includes('+') || h.includes('-') || h.includes('@'))); // spread LAC @ LVR
-              const col4 = colMatch(h=> h.includes('lac') && (h.includes('lvr') || h.includes('lv')) && (h.includes('o/u') || h.includes('over'))); // total LAC/LVR
-              const mapCols = [col1,col2,col3,col4];
-              if(mapCols.some(i=> i<0)) console.warn('[MondayIngest][Fallback] Some Monday column indices not found', mapCols);
-              function normVal(v, idx){
-                if(!v) return '';
-                const raw = v.replace(/"/g,'').trim();
-                if(!raw) return '';
-                if(/^over$/i.test(raw)) return 'Over';
-                if(/^under$/i.test(raw)) return 'Under';
-                // Only allow specific team tokens per column to avoid misalignment
-                if(idx===0){ // TB or HOU
-                  if(/^tb$/i.test(raw)) return 'TB';
-                  if(/^hou$/i.test(raw)) return 'HOU';
-                } else if(idx===2){ // LAC or LVR
-                  if(/^lac$/i.test(raw)) return 'LAC';
-                  if(/^lvr$/i.test(raw) || /^lv$/i.test(raw)) return 'LVR';
-                }
-                // Fallback: try generic normalization for teams
-                return normalizeNFLAbbr(raw);
-              }
-              for(let li=1; li<lines.length; li++){
-                const rawLine = lines[li];
-                const parts = rawLine.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(p=>p.replace(/"/g,'').trim());
-                if(parts.every(p=>!p)) continue; // skip blank
-                const email = (parts[emailIdx]||'').trim().toLowerCase();
-                if(!email) continue;
-                if(userPicks['Mon'][email] && userPicks['Mon'][email].some(v=>v)) continue; // first occurrence wins
-                const arr = mapCols.map((ci, idx)=> ci>=0 && parts[ci] ? normVal(parts[ci], idx) : '');
-                userPicks['Mon'][email] = arr;
-              }
-              // Fix typo email mapping
-              if(userPicks['Mon']['hankruddenn@yahoo.com'] && !userPicks['Mon']['hankrudden@yahoo.com']){
-                userPicks['Mon']['hankrudden@yahoo.com'] = userPicks['Mon']['hankruddenn@yahoo.com'];
-              }
-              if(!userPicks['Mon']['finsmaniac1551@gmail.com']){
-                userPicks['Mon']['finsmaniac1551@gmail.com'] = Array(needed).fill('');
-              }
-              recalcPoints('Mon'); recalcTotal(); updateLeaderboard(); if(picksDay==='Mon') renderPicksTable('Mon');
-              console.log('[MondayIngest][Fallback] Loaded picks from raw CSV (flex parser)');
-            } else {
-              console.warn('[MondayIngest][Fallback] CSV had header only');
-            }
-          } else {
-            console.warn('[MondayIngest][Fallback] Could not fetch CSV file:', csvResp.status);
-          }
-        }
-      } catch(csvErr){ console.warn('[MondayIngest][Fallback] CSV parse error', csvErr); }
-    })()
-  ]);
+  if(typeof window==='undefined' || window.LIVE_FETCH_ENABLED!==false){
+    await Promise.all([
+      updateNFLGame().catch(e=>console.warn('NFL init fetch failed', e)),
+      updateCollegeGame().catch(e=>console.warn('CFB Thurs init fetch failed', e)),
+      updateFridayGames().catch(e=>console.warn('Friday init fetch failed', e)),
+      (async()=>{ await resolveSaturdayEventIds(); await updateSaturdayGames(); })().catch(e=>console.warn('Saturday init fetch failed', e)),
+      updateSundayGames().catch(e=>console.warn('Sunday init fetch failed', e)),
+      updateMondayGames().catch(e=>console.warn('Monday init fetch failed', e))
+    ]);
+  } else {
+    console.log('[Init] LIVE_FETCH_ENABLED=false; skipping initial fetches/ingest');
+  }
   updateScoreboard(); setTimeout(()=>{ document.getElementById('leaderboardChart').classList.add('winner-glow'); },150);
   // Removed periodic forced update that previously animated gradient title (no longer needed)
   // Disabled periodic live polling (was every 45s) to reduce network noise per updated requirements.
   // If re-enabled, wrap behind a feature flag.
   // Throttled polling: 60s cadence to reduce load / avoid rate limits
+  // Live polling disabled (all games finalized). Re-enable by uncommenting block below.
+  /*
   setInterval(()=>{
     if(fridayStates.some(s=>s.status && s.status!=='STATUS_FINAL' && s.status!=='STATUS_SCHEDULED')) updateFridayGames();
     if(saturdayStates.some(s=>s.status && s.status!=='STATUS_FINAL' && s.status!=='STATUS_SCHEDULED')) updateSaturdayGames();
@@ -1044,7 +860,8 @@ window.addEventListener('load', async () => {
     if(mondayStates.some(s=>s.status && s.status!=='STATUS_FINAL' && s.status!=='STATUS_SCHEDULED')) updateMondayGames();
     updateScoreboard();
   }, 60000);
-  setTimeout(()=>{ resolveSaturdayEventIds().then(updateSaturdayGames); }, 20000);
+  */
+  if(typeof window==='undefined' || window.LIVE_FETCH_ENABLED!==false){ setTimeout(()=>{ resolveSaturdayEventIds().then(updateSaturdayGames); }, 20000); }
   // Simulator initialization removed
 
   // Collapse button logic

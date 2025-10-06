@@ -1,6 +1,9 @@
 // Configuration & static data extracted from leaderboard.html
 // Exposes globals for simplicity (no module system). Later we can namespace if desired.
 
+// Global feature flag to disable background/live API fetching during downtime
+window.LIVE_FETCH_ENABLED = false;
+
 /* ================= USERS & PICKS DATA ================= */
 // Added 'sun' field for upcoming Sunday scoreboard integration
 // New Week Roster (union of Thur–Sat CSVs) – 17 users reset to 0
