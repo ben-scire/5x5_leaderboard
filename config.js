@@ -2,8 +2,8 @@
 // Exposes globals for simplicity (no module system). Later we can namespace if desired.
 
 // Global feature flag controlling background/live API fetching
-// Re-enabled for Monday picks processing
-window.LIVE_FETCH_ENABLED = true;
+// Week complete: disable all live polling/fetches
+window.LIVE_FETCH_ENABLED = false;
 
 /* ================= USERS & PICKS DATA ================= */
 // Added 'sun' field for upcoming Sunday scoreboard integration
@@ -193,7 +193,7 @@ const coveredPicks = {
   // 8. New England Patriots +7.5 @ Buffalo Bills => New England covered (won 23-20 as +7.5 dog)
   'Sun':['HOU','DAL','DEN','CAR','TB','WSH','DET','NE'],
   // Monday winners placeholder (to be filled after game/props finalize)
-  'Mon':[]
+  'Mon':['JAX', 'Over', 'YES','OVER','UNDER','NO']
 };
 
 // New week initial day defaults (Thursday completed, focusing on Friday)
