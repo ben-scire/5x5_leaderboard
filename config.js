@@ -1,8 +1,9 @@
 // Configuration & static data extracted from leaderboard.html
 // Exposes globals for simplicity (no module system). Later we can namespace if desired.
 
-// Global feature flag to disable background/live API fetching during downtime
-window.LIVE_FETCH_ENABLED = false;
+// Global feature flag controlling background/live API fetching
+// Re-enabled for Monday picks processing
+window.LIVE_FETCH_ENABLED = true;
 
 /* ================= USERS & PICKS DATA ================= */
 // Added 'sun' field for upcoming Sunday scoreboard integration
@@ -59,7 +60,8 @@ const picksLabels = {
   'Sat':[ 'Texas -6.5 @ Florida', 'Boise St +19.5 @ ND', 'UVA +6.5 @ Louisville', 'Vanderbilt +10.5 @ Alabama', 'Texas Tech -12.5 @ Houston', 'Miss. State +14.5 @ Texas A&M', 'Miami -4.5 @ FSU' ],
   // Sunday (NFL) – pulled from Sun_Picks.csv header
   'Sun':[ 'Houston -1.5 @ Baltimore', 'Dallas -1.5 @ New York Jets', 'Denver +4.5 @ Philadelphia', 'Miami -1.5 @ Carolina', 'Tampa Bay +3.5 @ Seattle', 'Washington Commanders -2.5 @ Los Angeles Chargers', 'Detroit Lions -9.5 @ Cincinnati Bengals', 'New England Patriots +7.5 @ Buffalo Bills' ],
-  'Mon':[]
+  // Monday props/spread/total sequence (6 picks): Spread, Total, Hunt/Hunter TD (Yes/No), Thomas Jr Rec Yds 56.5 (O/U), Xavier Worthy Rec Yds 59.5 (O/U), Passing TDs: Mahomes 2+ & Lawrence 1+ (Yes/No)
+  'Mon':[ 'KC -3.5 @ JAX', 'KC/JAX O/U 45.5', 'Anytime TD: Hunt OR Hunter', 'Brian Thomas Jr Rec Yds 56.5', 'Xavier Worthy Rec Yds 59.5', 'Passing TDs: Mahomes 2+ & Lawrence 1+' ]
 };
 
 // Fresh week user picks containers
@@ -148,6 +150,26 @@ Object.assign(userPicks['Sun'], {
   'shawnscottcarl@gmail.com':['HOU','NYJ','DEN','CAR','SEA','LAC','CIN','NE']
 });
 
+// Monday picks (6 columns) from Monday form CSV
+Object.assign(userPicks['Mon'], {
+  'max1solov@gmail.com':['JAX','Over','YES','OVER','UNDER','YES'],
+  'lukeanastasi5@gmail.com':['KC','Under','NO','UNDER','OVER','NO'],
+  'jlindsey3428@gmail.com':['KC','Under','YES','OVER','OVER','YES'],
+  'wyaggy3@gmail.com':['KC','Over','NO','OVER','OVER','YES'],
+  'shawnscottcarl@gmail.com':['KC','Over','YES','UNDER','OVER','YES'],
+  'williamjabbott22@gmail.com':['KC','Under','NO','OVER','OVER','YES'],
+  'hankrudden@yahoo.com':['KC','Over','YES','OVER','UNDER','YES'],
+  'timjbohlman@gmail.com':['KC','Over','NO','OVER','OVER','YES'],
+  'samuel.lehman3337@gmail.com':['JAX','Over','YES','OVER','UNDER','NO'],
+  'kylejkz11@gmail.com':['KC','Over','YES','UNDER','OVER','YES'],
+  'jakelehman100@gmail.com':['JAX','Over','YES','OVER','OVER','YES'],
+  'goodnoughdylan@gmail.com':['KC','Over','NO','UNDER','OVER','YES'],
+  'mzanin98@gmail.com':['JAX','Under','YES','OVER','UNDER','YES'],
+  'scire.ben@gmail.com':['KC','Over','NO','OVER','UNDER','YES'],
+  'adam.schmidt520@gmail.com':['KC','Over','NO','OVER','OVER','YES'],
+  'conor.murphy30@gmail.com':['KC','Under','NO','OVER','OVER','NO']
+});
+
 // Covered picks from week_schedule.csv Result column (NOTE: placeholders appear inconsistent with actual teams - likely temporary markers)
 // Thu: TOTAL=OVER, SPREAD column shows 'UVA' (likely data entry placeholder), MLB shows 'NYY'
 // Fri: WVU @ BYU spread winner recorded as 'MIA' (placeholder)
@@ -169,7 +191,9 @@ const coveredPicks = {
   // 6. Washington Commanders -2.5 @ Los Angeles Chargers => Washington covered (won 27-10 laying 2.5)
   // 7. Detroit Lions -9.5 @ Cincinnati Bengals => Detroit covered (won 37-24, margin 13)
   // 8. New England Patriots +7.5 @ Buffalo Bills => New England covered (won 23-20 as +7.5 dog)
-  'Sun':['HOU','DAL','DEN','CAR','TB','WSH','DET','NE'], 'Mon':[]
+  'Sun':['HOU','DAL','DEN','CAR','TB','WSH','DET','NE'],
+  // Monday winners placeholder (to be filled after game/props finalize)
+  'Mon':[]
 };
 
 // New week initial day defaults (Thursday completed, focusing on Friday)
