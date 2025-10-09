@@ -214,6 +214,53 @@ PRESEEDED = []  # Legacy sunday seeding removed (fully migrated)
 
 app = Flask(__name__, static_folder='.', static_url_path='')
 
+# ---------------- Day Key Normalization Utilities -----------------
+def _canon_day(day: str):
+    if not day:
+        return None
+    d = day.strip().lower()
+    if d.startswith('thu'):  # thu, thur, thurs, thursday
+        return 'Thu'
+    if d.startswith('fri'):
+        return 'Fri'
+    if d.startswith('sat'):
+        return 'Sat'
+    if d.startswith('sun'):
+        return 'Sun'
+    if d.startswith('mon'):
+        return 'Mon'
+    return None
+
+def _migrate_picks_keys():
+    """One-time lightweight migration: rename 'Thurs' -> 'Thu' etc in picks file.
+    Idempotent; safe on every startup."""
+    try:
+        if not UNIFIED_PICKS_FILE.exists():
+            return
+        with UNIFIED_PICKS_FILE.open('r', encoding='utf-8') as f:
+            data = json.load(f) or {}
+        changed = False
+        # Map any plural/long forms to canonical
+        for k in list(data.keys()):
+            canon = _canon_day(k)
+            if canon and canon != k:
+                if canon not in data:  # simple rename
+                    data[canon] = data[k]
+                else:  # merge (keep latest ts per email)
+                    for email, rec in (data[k] or {}).items():
+                        existing = data[canon].get(email)
+                        if not existing or existing.get('ts',0) < rec.get('ts',0):
+                            data[canon][email] = rec
+                del data[k]
+                changed = True
+        if changed:
+            tmp = UNIFIED_PICKS_FILE.with_suffix('.tmp')
+            with tmp.open('w', encoding='utf-8') as f:
+                json.dump(data, f, indent=2)
+            tmp.replace(UNIFIED_PICKS_FILE)
+    except Exception as e:
+        print('[MIGRATE][WARN] picks key migration failed:', e)
+
 # Flask 3 removed before_first_request; implement version-agnostic one-time init.
 _INIT_DONE = False
 def _run_init_once():
@@ -265,8 +312,10 @@ def ensure_preseed():
                     updated = True
             if updated:
                 _save_users(users)
+            # Perform day key migration for unified picks file (idempotent)
+            _migrate_picks_keys()
         except Exception as e:
-            print('[INIT][WARN] failed seeding users:', e)
+            print('[INIT][WARN] failed seeding users or migration:', e)
 
 ############################
 # User Account Persistence
@@ -588,7 +637,8 @@ def _check_phrase(email, phrase):
 
 @app.route('/api/picks/public')
 def picks_public_unified():
-    day = (request.args.get('day') or '').strip()
+    raw_day = (request.args.get('day') or '').strip()
+    day = _canon_day(raw_day)
     if not day:
         return jsonify({ 'ok': False, 'error': 'missing_day' }), 400
     sched, _ = _load_schedule()
@@ -602,7 +652,7 @@ def picks_public_unified():
 
 @app.route('/api/picks/status/<day>')
 def picks_status_day(day):
-    day = (day or '').strip()
+    day = _canon_day(day)
     sched, _ = _load_schedule()
     if day not in (sched.get('days') or {}):
         return jsonify({ 'ok': False, 'error': 'unknown_day' }), 404
@@ -884,23 +934,24 @@ def picks_submit_day():
     - Overwrites allowed (no lock) until we integrate kickoff locking via schedule.
     """
     payload = request.get_json(force=True, silent=True) or {}
-    day = (payload.get('day') or '').strip()
+    day = _canon_day(payload.get('day'))
     email = (payload.get('email') or '').strip().lower()
     picks = payload.get('picks')
-    if day not in ('Thurs','Fri','Sat','Sun','Mon'):
+    if day not in ('Thu','Fri','Sat','Sun','Mon'):
         return jsonify({ 'ok': False, 'error': 'bad_day' }), 400
-    if email not in ALL_USERS:
-        return jsonify({ 'ok': False, 'error': 'unknown_email' }), 403
+    # Allow ANY email now (open participation). If you want to restrict later, re-enable whitelist check.
+    if not email or '@' not in email:
+        return jsonify({ 'ok': False, 'error': 'invalid_email' }), 400
     if not isinstance(picks, list):
         return jsonify({ 'ok': False, 'error': 'bad_picks' }), 400
     # Simple shape validation for Thursday (3 picks). Other days can expand later.
-    if day == 'Thurs' and len(picks) != 3:
+    if day == 'Thu' and len(picks) != 3:
         return jsonify({ 'ok': False, 'error': 'wrong_length', 'expected': 3 }), 400
     norm = []
     for i,v in enumerate(picks):
         if v is None: v = ''
         s = str(v).strip().upper()
-        if day == 'Thurs':
+        if day == 'Thu':
             if i == 0 and s not in ('PHI','NYG'):
                 return jsonify({ 'ok': False, 'error': 'invalid_spread' }), 400
             if i == 1 and s not in ('OVER','UNDER'):
