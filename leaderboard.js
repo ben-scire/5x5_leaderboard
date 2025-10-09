@@ -306,22 +306,7 @@ function updateLeaderboard(){
 
   const totalsArr = users.map((_,i)=> thursVals[i] + friVals[i] + satVals[i] + sunVals[i] + monVals[i]);
   const leaderScore = totalsArr.length? Math.max(...totalsArr): 0;
-  // --- Simplified Win Chance Calculation (linear 25%-75% band) ---
-  // Use only currently locked (scored) total points. Ignore unresolved/live variance.
-  // Let minLocked = lowest total, maxLocked = highest total among users.
-  // Each user's raw position r = (locked - minLocked)/(maxLocked - minLocked) in [0,1].
-  // Map to probability p = 0.25 + 0.50 * r => stays within [25%,75%].
-  // If everyone tied (range 0) -> all get 50%.
-  const lockedTotals = users.map(u=> u.total||0);
-  const minLocked = Math.min(...lockedTotals);
-  const maxLocked = Math.max(...lockedTotals);
-  const range = Math.max(1, maxLocked - minLocked); // avoid divide by zero
-  users.forEach(u=>{
-    const r = ( (u.total||0) - minLocked ) / range; // 0..1
-    const p = 0.25 + 0.50 * r; // 0.25..0.75
-    u._winPct = Math.round(p * 100);
-  });
-  // (Previous complex probability model removed for simplicity.)
+  // (Winning odds calculation removed per request.)
   const canvasEl = document.getElementById('leaderboardChart');
   if(!canvasEl){ return; }
   const ctx = canvasEl.getContext('2d');
@@ -361,28 +346,7 @@ function updateLeaderboard(){
   }
   const titleEl = document.getElementById('chartStaticTitle');
   if(titleEl){ titleEl.textContent = 'Leaderboard'; }
-  // Inject or update win probability panel below live scoreboard (#gamesWrap)
-  (function renderWinChances(){
-    let host = document.getElementById('winChancesPanel');
-    if(!host){
-      host = document.createElement('div');
-      host.id='winChancesPanel';
-      host.style.margin='12px 4px 8px';
-      host.style.fontSize='12px';
-      host.style.fontFamily='Inter,system-ui,sans-serif';
-      const afterRef = document.getElementById('gamesWrap');
-      if(afterRef && afterRef.parentNode){
-        afterRef.parentNode.insertBefore(host, afterRef.nextSibling);
-      } else {
-        (document.getElementById('chartWrapper')||document.body).appendChild(host);
-      }
-    }
-    const lines = users.map(u=> `<div class=\"wc-line\"><span class=\"wc-name\">${abbrevUser(u)}</span><span class=\"wc-bar\"><span class=\"wc-fill\" style=\"width:${u._winPct||0}%;\"></span></span><span class=\"wc-pct\">${u._winPct||0}%</span></div>`).join('');
-    host.innerHTML = `<div style=\"color:#9fb2bf;font-weight:600;margin-bottom:4px;\">Winning odds</div>${lines}`;
-    const styleId='winChanceInlineStyles';
-    if(!document.getElementById(styleId)){
-      const st=document.createElement('style'); st.id=styleId; st.textContent=`#winChancesPanel{padding:6px 8px;background:#121416;border:1px solid #1e2429;border-radius:6px;}#winChancesPanel .wc-line{display:flex;align-items:center;gap:6px;margin:3px 0;}#winChancesPanel .wc-name{width:60px;color:#cdd9e1;font-weight:500;}#winChancesPanel .wc-bar{flex:1;height:8px;background:#1d1d1d;border-radius:4px;overflow:hidden;position:relative;}#winChancesPanel .wc-fill{display:block;height:100%;background:linear-gradient(90deg,#2e7dd6,#33a02c);box-shadow:0 0 4px rgba(51,160,44,0.45);}#winChancesPanel .wc-pct{width:38px;text-align:right;color:#e8f6ff;font-variant-numeric:tabular-nums;font-weight:600;}`; document.head.appendChild(st); }
-  })();
+  // (Winning odds panel removed.)
   // Update explanatory note text (toggle already controls visibility)
   const noteEl = document.getElementById('liveProjNote'); if(noteEl) noteEl.remove();
 

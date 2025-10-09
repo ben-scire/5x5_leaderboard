@@ -223,8 +223,94 @@
       ]
     },
     "Sun": {
-      "games": [],
-      "picks": []
+      "games": [
+        {
+          "eventId": null,
+          "sport": "NFL",
+          "away": "Kansas City",
+          "home": "Jaxonville",
+          "awayAbbr": "KC",
+          "homeAbbr": "JAX",
+          "lineHome": -3.5,
+          "total": null,
+          "start": "",
+          "date": "2025-10-12",
+          "startIso": null
+        },
+        {
+          "eventId": null,
+          "sport": "NFL",
+          "away": "Kansas City",
+          "home": "Jaxonville",
+          "awayAbbr": "KC",
+          "homeAbbr": "JAX",
+          "lineHome": null,
+          "total": null,
+          "start": "",
+          "date": "2025-10-12",
+          "startIso": null
+        },
+        {
+          "eventId": null,
+          "sport": "NFL",
+          "away": "Kansas City",
+          "home": "Jaxonville",
+          "awayAbbr": "KC",
+          "homeAbbr": "JAX",
+          "lineHome": null,
+          "total": null,
+          "start": "",
+          "date": "2025-10-12",
+          "startIso": null
+        },
+        {
+          "eventId": null,
+          "sport": "NFL",
+          "away": "Kansas City",
+          "home": "Jaxonville",
+          "awayAbbr": "KC",
+          "homeAbbr": "JAX",
+          "lineHome": null,
+          "total": null,
+          "start": "",
+          "date": "2025-10-12",
+          "startIso": null
+        },
+        {
+          "eventId": null,
+          "sport": "NFL",
+          "away": "Kansas City",
+          "home": "Jaxonville",
+          "awayAbbr": "KC",
+          "homeAbbr": "JAX",
+          "lineHome": null,
+          "total": null,
+          "start": "",
+          "date": "2025-10-12",
+          "startIso": null
+        },
+        {
+          "eventId": null,
+          "sport": "NFL",
+          "away": "Kansas City",
+          "home": "Jaxonville",
+          "awayAbbr": "KC",
+          "homeAbbr": "JAX",
+          "lineHome": null,
+          "total": null,
+          "start": "",
+          "date": "2025-10-12",
+          "startIso": null
+        }
+      ],
+      "picks": [
+        {
+          "type": "SPREAD",
+          "gameIndex": 0,
+          "label": "KC @ JAX -3.5",
+          "result": null
+        }
+      ]
     }
   }
 }

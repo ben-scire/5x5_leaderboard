@@ -874,6 +874,50 @@ def picks_save():
         save_unified_picks(all_p)
     return jsonify({ 'ok': True, 'saved': True, 'locked': locks })
 
+@app.route('/api/picks/submit_day', methods=['POST'])
+def picks_submit_day():
+    """Lightweight day submission endpoint for quick form (email-only trust model).
+    Body: { day:'Thurs', email, picks:[...] }
+    - Email must be in ALL_USERS
+    - For 'Thurs' currently expect exactly 3 picks: [SPREAD, TOTAL, PROP]
+    - Values normalized upper-case; minimal validation of choices.
+    - Overwrites allowed (no lock) until we integrate kickoff locking via schedule.
+    """
+    payload = request.get_json(force=True, silent=True) or {}
+    day = (payload.get('day') or '').strip()
+    email = (payload.get('email') or '').strip().lower()
+    picks = payload.get('picks')
+    if day not in ('Thurs','Fri','Sat','Sun','Mon'):
+        return jsonify({ 'ok': False, 'error': 'bad_day' }), 400
+    if email not in ALL_USERS:
+        return jsonify({ 'ok': False, 'error': 'unknown_email' }), 403
+    if not isinstance(picks, list):
+        return jsonify({ 'ok': False, 'error': 'bad_picks' }), 400
+    # Simple shape validation for Thursday (3 picks). Other days can expand later.
+    if day == 'Thurs' and len(picks) != 3:
+        return jsonify({ 'ok': False, 'error': 'wrong_length', 'expected': 3 }), 400
+    norm = []
+    for i,v in enumerate(picks):
+        if v is None: v = ''
+        s = str(v).strip().upper()
+        if day == 'Thurs':
+            if i == 0 and s not in ('PHI','NYG'):
+                return jsonify({ 'ok': False, 'error': 'invalid_spread' }), 400
+            if i == 1 and s not in ('OVER','UNDER'):
+                return jsonify({ 'ok': False, 'error': 'invalid_total' }), 400
+            if i == 2 and s not in ('YES','NO'):
+                return jsonify({ 'ok': False, 'error': 'invalid_prop' }), 400
+        norm.append(s)
+    with LOCK:
+        all_p = load_unified_picks()
+        day_map = all_p.setdefault(day, {})
+        rec = day_map.get(email) or { 'picks': ['' for _ in norm], 'ts': int(time.time()*1000) }
+        rec['picks'] = norm
+        rec['ts'] = int(time.time()*1000)
+        day_map[email] = rec
+        save_unified_picks(all_p)
+    return jsonify({ 'ok': True, 'email': email, 'day': day, 'picks': norm, 'ts': rec['ts'] })
+
 
 ############################
 # Live Scoring / Leaderboard Endpoint

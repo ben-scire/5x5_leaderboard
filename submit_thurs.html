@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Thursday Picks Submission</title>
+  <link rel="stylesheet" href="leaderboard.css" />
+  <style>
+    body { max-width: 720px; margin: 0 auto; padding: 18px; font-family: Inter, system-ui, sans-serif; }
+    h1 { font-size: 22px; margin: 0 0 12px; }
+    fieldset { border: 1px solid #2e3b47; padding: 14px 16px 18px; margin-bottom: 18px; border-radius: 6px; }
+    legend { padding: 0 6px; font-weight: 600; }
+    label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+    .pick-group { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 8px; }
+    .actions { display: flex; gap: 10px; }
+    button { background:#1976d2; color:#fff; border:none; padding:10px 18px; border-radius:4px; font-weight:600; cursor:pointer; }
+    button:disabled { opacity:0.55; cursor: not-allowed; }
+    .status { margin-top:14px; font-size:14px; min-height:20px; }
+    .ok { color:#4caf50; }
+    .err { color:#ef5350; }
+    input[type=email] { width:100%; max-width:380px; padding:8px 10px; border:1px solid #2e3b47; border-radius:4px; background:#0f1418; color:#fff; }
+    .summary { margin-top: 20px; padding:12px 14px; border:1px solid #214a32; background:#122018; border-radius:6px; display:none; }
+    .summary h2 { margin:0 0 8px; font-size:18px; }
+    .summary code { background:#1d2b33; padding:2px 4px; border-radius:3px; }
+  </style>
+</head>
+<body>
+  <h1>Thursday Picks (PHI -7.5 @ NYG)</h1>
+  <p style="font-size:14px; line-height:1.4; color:#9fb2bf;">Enter your email and selections. Submissions allowed until kickoff. All three picks are required.</p>
+  <form id="thursForm" autocomplete="off">
+    <fieldset>
+      <legend>Email</legend>
+      <input required type="email" id="email" placeholder="you@example.com" />
+    </fieldset>
+    <fieldset>
+      <legend>Spread: PHI -7.5 @ NYG</legend>
+      <div class="pick-group" data-name="spread">
+        <label><input type="radio" name="spread" value="PHI" required /> PHI</label>
+        <label><input type="radio" name="spread" value="NYG" required /> NYG</label>
+      </div>
+    </fieldset>
+    <fieldset>
+      <legend>Total: O/U 40.5</legend>
+      <div class="pick-group" data-name="total">
+        <label><input type="radio" name="total" value="OVER" required /> Over 40.5</label>
+        <label><input type="radio" name="total" value="UNDER" required /> Under 40.5</label>
+      </div>
+    </fieldset>
+    <fieldset>
+      <legend>Prop: Jaxson Dart OR AJ Brown TD</legend>
+      <div class="pick-group" data-name="prop">
+        <label><input type="radio" name="prop" value="YES" required /> Yes</label>
+        <label><input type="radio" name="prop" value="NO" required /> No</label>
+      </div>
+    </fieldset>
+    <div class="actions">
+      <button type="submit" id="submitBtn">Submit Picks</button>
+      <button type="button" id="resetBtn" style="background:#455a64;">Reset</button>
+    </div>
+    <div class="status" id="statusMsg"></div>
+  </form>
+  <div class="summary" id="summaryBox">
+    <h2>Submission Saved</h2>
+    <p><strong>Email:</strong> <span id="sumEmail"></span></p>
+    <p><strong>Picks:</strong></p>
+    <ul id="sumList" style="margin:0 0 10px 18px; padding:0; list-style:disc;"></ul>
+    <p style="font-size:12px; color:#78909c;">You can resubmit to overwrite until kickoff. Refresh leaderboard later to see results.</p>
+  </div>
+  <script src="submit_thurs.js"></script>
+</body>
+</html>
