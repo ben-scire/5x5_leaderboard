@@ -642,8 +642,10 @@ def picks_public_unified():
     if not day:
         return jsonify({ 'ok': False, 'error': 'missing_day' }), 400
     sched, _ = _load_schedule()
+    schedule_days = list((sched.get('days') or {}).keys())
     if day not in (sched.get('days') or {}):
-        return jsonify({ 'ok': False, 'error': 'unknown_day' }), 404
+        # Relax: allow access even if schedule missing (e.g., minimal week setup). Log once.
+        print(f"[PICKS][INFO] Requested day '{day}' not in schedule days {schedule_days}; proceeding with unified picks store only.")
     all_p = load_unified_picks()
     day_map = all_p.get(day) or {}
     # Return only users who fully submitted (every slot non-empty OR allow empties? treat length rule only)
@@ -654,8 +656,9 @@ def picks_public_unified():
 def picks_status_day(day):
     day = _canon_day(day)
     sched, _ = _load_schedule()
+    schedule_days = list((sched.get('days') or {}).keys())
     if day not in (sched.get('days') or {}):
-        return jsonify({ 'ok': False, 'error': 'unknown_day' }), 404
+        print(f"[PICKS][INFO] Status request for day '{day}' not in schedule days {schedule_days}; returning picks file status only.")
     picks_map = load_unified_picks()
     day_map = picks_map.get(day) or {}
     return jsonify({ 'ok': True, 'submitted': list(day_map.keys()), 'count': len(day_map) })
