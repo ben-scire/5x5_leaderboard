@@ -1,20 +1,4 @@
 Day,Sport,EventId,Away,AwayAbbr,Home,HomeAbbr,Market,Line,StartTimeET,Date,Result
-Thu,NFL,,San Fransisco 49ers,SF,Los Angelas Rams,LAR,TOTAL,44.5,,,OVER
-Thu,NFL,,San Fransisco 49ers,SF,Los Angelas Rams,LAR,SPREAD,8.5,,,SF
-Thu,MLB,,Boston Red Sox,BOS,New York Yankees,NYY,SPREAD,0.5,,,NYY
-Fri,NCAAF,,WVU,WVU,BYU,BYU,SPREAD,18.5,,,WVU
-Sat,NCAAF,,Texas Tech,TTU,Houston,UH,SPREAD,-12.5,,,TTU
-Sat,NCAAF,,Texas,UT,Florida,FLA,SPREAD,-6.5,,,FLA
-Sat,NCAAF,,Boise St,Boise,Notre Dame,ND,SPREAD,19.5,,,ND
-Sat,NCAAF,,Virginia,UVA,Louissville,LOU,SPREAD,6.5,,,UVA
-Sat,NCAAF,,Vanderbilt,Vandy,Alabama,Bama,SPREAD,10.5,,,Bama
-Sat,NCAAF,,Mississippi St,Miss,Texas A&M,A&M,SPREAD,14.5,,,A&M
-Sat,NCAAF,,Miami,MIA,Florida St,FSU,SPREAD,-4.5,,,MIA
-Sun,NFL,,Kansas City,KC,Jaxonville,JAX,SPREAD,-3.5,,,
-Sun,NFL,,Kansas City,KC,Jaxonville,JAX,TOTAL,45.5,,,
-Sun,NFL,,Kansas City,KC,Jaxonville,JAX,PROP Yes/No,Hunt or Hunter TD,,,
-Sun,NFL,,Kansas City,KC,Jaxonville,JAX,PROP O/U,Thomas Jr Receiving Yards 56.5,,,
-Sun,NFL,,Kansas City,KC,Jaxonville,JAX,PROP O/U,Thomas Jr Receiving Yards 56.5,,,
-Sun,NFL,,Kansas City,KC,Jaxonville,JAX,PROP Yes/No,Passing TDs,,,
-,,,,,,,,,,,
-,,,,,,,,,,,
+Thu,NFL,,Philadelphia Eagles,PHI,New York Giants,NYG,SPREAD,-7.5,,, 
+Thu,NFL,,Philadelphia Eagles,PHI,New York Giants,NYG,TOTAL,40.5,,, 
+Thu,NFL,,Philadelphia Eagles,PHI,New York Giants,NYG,PROP Yes/No,Dart OR AJ Brown TD,,, 

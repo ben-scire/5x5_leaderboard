@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>5x5 Pick 'em Week 3</title>
+  <title>5x5 Pick 'em – New Week</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -15,13 +15,17 @@
   <div class="app-frame">
   <div class="site-header">
     <div class="header-inner">
-  <div class="site-title">5x5 Pick 'em Week 3</div>
+  <div class="site-title">5x5 Pick 'em – New Week</div>
   <div class="subtitle">Coach H&amp;Jake Coaching Co. and TS^2G</div>
   <img src="SSG-white.png" alt="The Scire Scoring Group Logo" class="tsg-logo" onerror="this.removeAttribute('onerror');this.style.opacity='0';setTimeout(()=>{this.src='SSG-white.png';this.style.opacity='1';},300);" />
     </div>
   </div>
   <div class="header-divider"></div>
-  <div style="padding:8px 12px;font-size:13px;"><a href="picks.html" style="color:#4fc3f7;">Submit / Edit Your Picks</a></div>
+  <div style="padding:8px 12px;font-size:13px;display:flex;gap:24px;flex-wrap:wrap;align-items:center;">
+    <a href="picks.html" style="color:#4fc3f7;">Legacy Multi-Day Form</a>
+    <a href="submit_thurs.html" style="color:#ffb74d;font-weight:600;">Submit This Week's Thursday Picks ➜</a>
+    <span style="font-size:12px;color:#888;">(If you still see old data, hard refresh with Ctrl+F5)</span>
+  </div>
   <!-- removed live data fetch error text -->
 
   <!-- Leaderboard now primary focus -->
@@ -64,12 +68,12 @@
   </div><!-- /.app-frame -->
   <!-- MNF submission section removed (now fully locked and displayed via CSV) -->
   <!-- External scripts loaded at end for clarity (defer not required here) -->
-  <script src="config.js"></script>
+  <script src="config.js?v=NW1"></script>
   <!-- Load dynamic schedule mapper BEFORE legacy leaderboard.js so globals populate -->
-  <script src="schedule_init.js"></script>
-  <script src="leaderboard.js"></script>
+  <script src="schedule_init.js?v=NW1"></script>
+  <script src="leaderboard.js?v=NW1"></script>
   <!-- Dynamic live integration (backend-driven). Falls back silently if APIs missing -->
-  <script src="leaderboard_live.js"></script>
+  <script src="leaderboard_live.js?v=NW1"></script>
   <!-- monday_submit.js removed -->
 </body>
 </html>
