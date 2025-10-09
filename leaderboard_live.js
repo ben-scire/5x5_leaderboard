@@ -54,7 +54,7 @@
     if(!dayDef){ tbl.innerHTML='<tr><td style="padding:8px;color:#888;">No picks for '+currentDay+'</td></tr>'; return; }
     const picks = dayDef.picks || [];
     const rows = [];
-    rows.push('<tr><th>#</th><th>Definition</th><th>Result</th></tr>');
+    rows.push('<tr><th>#</th><th>Definition</th><th>Result / Time</th></tr>');
     picks.forEach((p,i)=>{
       const type = p.type; // SPREAD | TOTAL | PROP
       let label='';
@@ -69,7 +69,18 @@
         label = p.propLabel || 'Prop';
       }
       const result = normalizeResult(p.result);
-      rows.push(`<tr><td>${i+1}</td><td>${label}</td><td class="res ${result? 'has-res':''}">${result||''}</td></tr>`);
+      let timeDisp = '';
+      if(!result){
+        // Prefer explicit startTimeStr (already normalized human string) else parse startTime
+        if(p.startTimeStr){ timeDisp = p.startTimeStr; }
+        else if(p.startTime){
+          try { const dt = new Date(p.startTime); if(!isNaN(dt.getTime())){ const hrs = dt.getHours(); const mins = dt.getMinutes();
+            const h12 = ((hrs+11)%12)+1; const ampm = hrs>=12?'PM':'AM'; const mm = mins.toString().padStart(2,'0'); timeDisp = h12+':'+mm+' '+ampm; } } catch(_){ }
+        }
+        if(!timeDisp) timeDisp='TBD';
+      }
+      const cellContent = result ? result : `<span class="sched-time">${timeDisp}</span>`;
+      rows.push(`<tr><td>${i+1}</td><td>${label}</td><td class="res ${result? 'has-res':'pending'}">${cellContent}</td></tr>`);
     });
     tbl.innerHTML = rows.join('');
   }
