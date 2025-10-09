@@ -30,3 +30,25 @@ const sundayGames = []; const sundayStartTimes = []; const sundayStates = [];
 const mondayGames = []; const mondayStartTimes = []; const mondayStates = [];
 
 window._lbConfig = { users, nicknameMap, picksLabels, userPicks, coveredPicks, fridayGames, saturdayGames, sundayGames, mondayGames, sundayStartTimes, mondayStartTimes };
+
+// Define the Thursday Night NFL game (Eagles @ Giants)
+// Spread label shows PHI -7.5 @ NYG, meaning home team (NYG) is +7.5 -> lineHome = +7.5
+window.nflGame = {
+  eventId: '401772940',
+  away: 'Philadelphia Eagles',
+  awayAbbr: 'PHI',
+  home: 'New York Giants',
+  homeAbbr: 'NYG',
+  lineHome: 7.5, // Giants are +7.5
+  total: 40.5
+};
+
+// Initial live state placeholder consumed by leaderboard.js updateNFLGame()
+window.nflState = {
+  status: 'STATUS_SCHEDULED',
+  score: '0-0',
+  home: 0,
+  away: 0,
+  period: 0,
+  clock: ''
+};
