@@ -17,7 +17,7 @@
     const mapDay = (k) => {
       if(!k) return k;
       const l = k.toLowerCase();
-      if(l.startsWith('thu')) return 'Thurs';
+  if(l.startsWith('thu')) return 'Thu';
       if(l.startsWith('fri')) return 'Fri';
       if(l.startsWith('sat')) return 'Sat';
       if(l.startsWith('sun')) return 'Sun';
@@ -49,10 +49,10 @@
   else if(dayKey==='Sat'){ window.saturdayGames = games; window.saturdayStates = games.map((g,i)=>({ status:'STATUS_SCHEDULED', score:'0-0', home:0, away:0, period:0, clock:'', startTimeStr:g.start || '', meta:{ home:{abbr:g.homeAbbr}, away:{abbr:g.awayAbbr} } })); window.saturdayStartTimes = games.map(g=> g.start || ''); }
       else if(dayKey==='Sun'){ window.sundayGames = games; window.sundayStates = games.map((g,i)=>({ status:'STATUS_SCHEDULED', score:'0-0', home:0, away:0, period:0, clock:'', startTimeStr:g.start || '', meta:{ home:{abbr:g.homeAbbr}, away:{abbr:g.awayAbbr} } })); window.sundayStartTimes = games.map(g=> g.start || ''); }
       else if(dayKey==='Mon'){ window.mondayGames = games; window.mondayStates = games.map((g,i)=>({ status:'STATUS_SCHEDULED', score:'0-0', home:0, away:0, period:0, clock:'', startTimeStr:g.start || '', meta:{ home:{abbr:g.homeAbbr}, away:{abbr:g.awayAbbr} } })); window.mondayStartTimes = games.map(g=> g.start || ''); }
-      else if(dayKey==='Thurs'){ /* Thursday already historical; keep existing config if present */ }
+  else if(dayKey==='Thu'){ /* Thursday already historical; keep existing config if present */ }
     }
 
-    ['Thurs','Fri','Sat','Sun','Mon'].forEach(applyDay);
+  ['Thu','Fri','Sat','Sun','Mon'].forEach(applyDay);
 
     // Pre-create covered arrays for new days if not set
     ['Fri','Sat','Sun','Mon'].forEach(d=>{ if(!Array.isArray(coveredPicks[d])) coveredPicks[d] = Array((picksLabels[d]||[]).length).fill(null); });

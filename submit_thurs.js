@@ -29,7 +29,7 @@
       const total = (form.querySelector('input[name="total"]:checked')||{}).value;
       const prop = (form.querySelector('input[name="prop"]:checked')||{}).value;
       if(!spread||!total||!prop){ setStatus('All picks are required.'); submitBtn.disabled=false; return; }
-      const payload = { day:'Thurs', email, picks:[spread.toUpperCase(), total.toUpperCase(), prop.toUpperCase()] };
+  const payload = { day:'Thu', email, picks:[spread.toUpperCase(), total.toUpperCase(), prop.toUpperCase()] };
       const resp = await fetch('/api/picks/submit_day', {
         method:'POST',
         headers:{ 'Content-Type':'application/json' },

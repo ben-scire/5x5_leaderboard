@@ -7,7 +7,7 @@ const nicknameMap = {}; // kept as empty object to avoid errors where referenced
 
 // Labels: New Thursday triple pick (Spread, Total, Prop) + empty arrays for other days to avoid undefined lookups
 const picksLabels = {
-  'Thurs': [ 'NFL: PHI -7.5 @ NYG', 'Total: PHI/NYG O/U 40.5', 'Anytime TD: Dart OR A.J. Brown' ],
+  'Thu': [ 'NFL: PHI -7.5 @ NYG', 'Total: PHI/NYG O/U 40.5', 'Anytime TD: Dart OR A.J. Brown' ],
   'Fri': [], 'Sat': [], 'Sun': [], 'Mon': []
 };
 
@@ -15,13 +15,13 @@ const picksLabels = {
 const users = []; // leaderboard.js will show nothing until at least one pick recorded
 
 // Empty containers – will fill as users submit (server persists in picks.json)
-const userPicks = { 'Thurs': {}, 'Fri': {}, 'Sat': {}, 'Sun': {}, 'Mon': {} };
+const userPicks = { 'Thu': {}, 'Fri': {}, 'Sat': {}, 'Sun': {}, 'Mon': {} };
 // Winners placeholders for each day (avoid undefined access in normalization logic)
-const coveredPicks = { 'Thurs': [], 'Fri': [], 'Sat': [], 'Sun': [], 'Mon': [] }; // winners TBD
+const coveredPicks = { 'Thu': [], 'Fri': [], 'Sat': [], 'Sun': [], 'Mon': [] }; // winners TBD
 
 // Focus Thursday initially
-let currentDay = 'Thurs';
-let scoreboardDay = 'Thurs';
+let currentDay = 'Thu';
+let scoreboardDay = 'Thu';
 
 // Placeholder game arrays (allow existing UI loops to run) – real schedule from /api/schedule later.
 const fridayGames = []; const fridayStates = [];

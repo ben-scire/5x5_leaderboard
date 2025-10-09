@@ -105,7 +105,7 @@
         if(added){
           // Re-render legacy components if present
           if(typeof window.updateLeaderboard==='function') { window.updateLeaderboard(); }
-          if(typeof window.renderPicksTable==='function') { window.renderPicksTable(window.currentDay||'Thurs'); }
+          if(typeof window.renderPicksTable==='function') { window.renderPicksTable(window.currentDay||'Thu'); }
         }
       }
     } catch(syncErr){ console.warn('[live] user sync failed', syncErr); }
