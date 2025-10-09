@@ -1,5 +1,24 @@
 /* Core logic extracted from leaderboard.html */
 
+// Pre-populate users list with any already-submitted Thursday emails (immediate display even with live disabled)
+(function immediateThuSeed(){
+  if(typeof fetch==='function'){
+    try {
+      fetch('/api/picks/status/Thu', { cache:'no-store' })
+        .then(r=> r.ok? r.json(): null)
+        .then(j=>{
+          if(!j || !j.ok || !Array.isArray(j.submitted)|| !window.users) return;
+          const existing = new Set(window.users.map(u=>u.username));
+          let added=false;
+          j.submitted.forEach(em=>{ if(!existing.has(em)){ window.users.push({ username:em, thurs:0,fri:0,sat:0,sun:0,mon:0,total:0 }); added=true; } });
+          if(added && typeof window.updateLeaderboard==='function') { window.updateLeaderboard(); }
+          if(added && typeof window.renderPicksTable==='function'){ window.renderPicksTable('Thu'); }
+        })
+        .catch(()=>{});
+    } catch(_e) { /* silent */ }
+  }
+})();
+
 // Static final results for past days (used when those days are complete or when
 // dynamic game objects are not present/loaded). This guarantees a scoreboard
 // row with actual final scores instead of a blank table.
