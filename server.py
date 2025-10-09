@@ -1130,55 +1130,6 @@ def api_admin_all_picks():
         safe[day] = { email: { 'picks': rec.get('picks') or [], 'ts': rec.get('ts') } for email, rec in (dmap or {}).items() }
     return jsonify({ 'ok': True, 'admin': admin_email, 'scheduleVersion': ver, 'days': safe })
 
-@app.route('/api/admin/delete_pick', methods=['POST'])
-def api_admin_delete_pick():
-    """Delete a user's submission for a given day (or all days) – admin only.
-    Body JSON:
-      {
-        adminEmail: str,   # must be in ADMINS
-        phrase: str,        # admin's pass phrase (PHRASE_MAP)
-        day: 'Thu'|'Fri'|'Sat'|'Sun'|'Mon' (optional if allDays true)
-        email: str,         # target user email to delete
-        allDays: bool       # if true, remove this user's picks from every day
-      }
-    Returns { ok:true, removed:{ day: bool } }
-    """
-    payload = request.get_json(force=True, silent=True) or {}
-    admin_email = (payload.get('adminEmail') or '').strip().lower()
-    phrase = (payload.get('phrase') or '').strip()
-    target_email = (payload.get('email') or '').strip().lower()
-    day_raw = (payload.get('day') or '').strip()
-    all_days_flag = bool(payload.get('allDays'))
-    if admin_email not in ADMINS:
-        return jsonify({ 'ok': False, 'error': 'forbidden' }), 403
-    expected = PHRASE_MAP.get(admin_email)
-    if not expected or expected.lower() != phrase.lower():
-        return jsonify({ 'ok': False, 'error': 'invalid_phrase' }), 403
-    if not target_email:
-        return jsonify({ 'ok': False, 'error': 'missing_target' }), 400
-    if not all_days_flag:
-        day = _canon_day(day_raw)
-        if not day:
-            return jsonify({ 'ok': False, 'error': 'bad_day' }), 400
-    else:
-        day = None
-    with LOCK:
-        data = load_unified_picks()
-        removed = {}
-        if all_days_flag:
-            for d, dmap in data.items():
-                if target_email in dmap:
-                    del dmap[target_email]
-                    removed[d] = True
-        else:
-            dmap = data.get(day)
-            if dmap and target_email in dmap:
-                del dmap[target_email]
-                removed[day] = True
-        if removed:
-            save_unified_picks(data)
-        return jsonify({ 'ok': True, 'removed': removed, 'count': len(removed) })
-
 
 @app.route('/healthz')
 def healthz():

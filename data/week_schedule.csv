@@ -1,4 +1,4 @@
-Day,Sport,EventId,Away,AwayAbbr,Home,HomeAbbr,Market,Line,StartTimeET,Date,Result
-Thu,NFL,,Philadelphia Eagles,PHI,New York Giants,NYG,SPREAD,-7.5,,, 
-Thu,NFL,,Philadelphia Eagles,PHI,New York Giants,NYG,TOTAL,40.5,,, 
-Thu,NFL,,Philadelphia Eagles,PHI,New York Giants,NYG,PROP Yes/No,Dart OR AJ Brown TD,,, 
+Day,Sport,EventId,Away,AwayAbbr,Home,HomeAbbr,Market,Selection,Line,Total,StartTimeET,Date,Result,PropLabel
+Thu,NFL,,Philadelphia Eagles,PHI,New York Giants,NYG,SPREAD,PHI,7.5, ,8:15 PM,, ,
+Thu,NFL,,Philadelphia Eagles,PHI,New York Giants,NYG,TOTAL, , ,40.5,8:15 PM,, ,
+Thu,NFL,,Philadelphia Eagles,PHI,New York Giants,NYG,PROP, , , ,8:15 PM,, ,Dart OR AJ Brown TD
