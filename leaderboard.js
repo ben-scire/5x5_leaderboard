@@ -465,6 +465,13 @@ function liveGameCoverInfo(day, idx){
 function renderPicksTable(day=currentDay){
   // Requirement update: show scheduled games for Sat-Sun-Mon again (no kickoff-based hiding). Always render all defined columns for selected day.
   const tbl = document.getElementById('picksTable');
+  // Empty-state: if no users at all for the selected day, show a friendly hint instead of a totally blank table
+  const userCount = users.length;
+  if(userCount===0){
+    tbl.innerHTML = '<tr><th class="th-small">Player</th><th class="th-small">Picks</th></tr>'+
+      '<tr><td colspan="2" style="text-align:center;padding:14px 10px;font-size:13px;color:#9fb2bf;">No '+day+' submissions yet. <a href="submit_thurs.html" style="color:#66ffa6;">Submit yours</a> to appear here.</td></tr>';
+    return;
+  }
   let labelCount = (picksLabels[day]||[]).length;
   // Dynamic expansion: if picksLabels has fewer columns than any user's submitted picks for this day, expand to show them.
   const maxUserLenGeneric = Object.values(userPicks[day]||{}).reduce((m,arr)=> Math.max(m, Array.isArray(arr)?arr.length:0), 0);
