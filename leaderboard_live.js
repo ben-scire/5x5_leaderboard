@@ -79,6 +79,26 @@
     if(!leaderboard){ tbl.innerHTML = '<tr><td style="padding:8px;color:#888;">Loading leaderboard...</td></tr>'; return; }
     const entries = leaderboard.entries || [];
     if(!entries.length){ tbl.innerHTML = '<tr><td style="padding:8px;color:#888;">No graded picks yet.</td></tr>'; return; }
+
+    // --- Sync emails to legacy global users array (for chart + picks table) ---
+    try {
+      if(Array.isArray(window.users)){
+        const existingSet = new Set(window.users.map(u=>u.username));
+        let added=false;
+        entries.forEach(e=>{
+          if(!existingSet.has(e.email)){
+            window.users.push({ username:e.email, thurs:0,fri:0,sat:0,sun:0,mon:0,total:0 });
+            existingSet.add(e.email); added=true;
+          }
+        });
+        if(added){
+          // Re-render legacy components if present
+          if(typeof window.updateLeaderboard==='function') { window.updateLeaderboard(); }
+          if(typeof window.renderPicksTable==='function') { window.renderPicksTable(window.currentDay||'Thurs'); }
+        }
+      }
+    } catch(syncErr){ console.warn('[live] user sync failed', syncErr); }
+
     const dayOrder = leaderboard.dayOrder || [];
     const dayHead = dayOrder.map(d=>`<th>${d}</th>`).join('');
     const header = `<tr><th>Rank</th><th>Player</th>${dayHead}<th>Total</th><th>Ans</th><th>Tot</th></tr>`;
