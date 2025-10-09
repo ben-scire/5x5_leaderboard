@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Admin – Submissions Viewer</title>
+  <link rel="stylesheet" href="leaderboard.css" />
+  <style>
+    body { font-family: Inter, system-ui, sans-serif; padding:18px; background:#0e1418; color:#e2ecf2; }
+    h1 { margin:0 0 16px; font-size:22px; }
+    .controls { display:flex; flex-wrap:wrap; gap:12px; align-items:center; margin-bottom:14px; }
+    select, button { background:#152029; color:#fff; border:1px solid #2e3b47; padding:6px 10px; border-radius:4px; font-size:14px; }
+    button { cursor:pointer; font-weight:600; }
+    table { border-collapse:collapse; width:100%; font-size:13px; }
+    th, td { border:1px solid #2a3944; padding:6px 8px; text-align:left; }
+    th { background:#152029; position:sticky; top:0; z-index:1; }
+    tbody tr:nth-child(odd) { background:#131b21; }
+    tbody tr:nth-child(even) { background:#18222a; }
+    .status-bar { font-size:12px; color:#90a4ae; margin-top:8px; }
+    .error { color:#ef5350; }
+    .pill { display:inline-block; padding:2px 6px; border-radius:12px; background:#26323b; font-size:11px; margin-left:6px; }
+    .refresh-indicator { font-size:11px; color:#4fc3f7; margin-left:8px; }
+    .picks-cell span { display:inline-block; background:#24323c; padding:2px 6px; border-radius:4px; margin:2px 4px 2px 0; }
+    .flex-break { flex-basis:100%; height:0; }
+  </style>
+</head>
+<body>
+  <h1>Submissions Viewer <span id="dayLabel" class="pill">Thurs</span></h1>
+  <div class="controls">
+    <label>Day:
+      <select id="daySelect">
+        <option value="Thurs">Thurs</option>
+        <option value="Fri">Fri</option>
+        <option value="Sat">Sat</option>
+        <option value="Sun">Sun</option>
+        <option value="Mon">Mon</option>
+      </select>
+    </label>
+    <label>Auto Refresh:
+      <select id="autoSelect">
+        <option value="0">Off</option>
+        <option value="5">5s</option>
+        <option value="10">10s</option>
+        <option value="30">30s</option>
+        <option value="60">60s</option>
+      </select>
+    </label>
+    <button id="refreshBtn">Refresh Now</button>
+    <div id="lastUpdate" style="font-size:12px; color:#90a4ae;">—</div>
+  </div>
+
+  <div class="scroll-x" style="overflow:auto; max-height:65vh; border:1px solid #1f2c35; border-radius:6px;">
+    <table id="subsTable">
+      <thead>
+        <tr>
+          <th style="width:200px;">Email</th>
+          <th>Picks</th>
+          <th style="width:120px;">Timestamp</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+  <div class="status-bar" id="statusBar">Idle.</div>
+
+  <script>
+    const daySelect = document.getElementById('daySelect');
+    const autoSelect = document.getElementById('autoSelect');
+    const refreshBtn = document.getElementById('refreshBtn');
+    const subsTableBody = document.querySelector('#subsTable tbody');
+    const statusBar = document.getElementById('statusBar');
+    const lastUpdate = document.getElementById('lastUpdate');
+    const dayLabel = document.getElementById('dayLabel');
+    let timer = null;
+
+    function fmtTs(ts){
+      if(!ts) return '-';
+      try { return new Date(ts).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit', second:'2-digit' }); } catch(e){ return ts; }
+    }
+
+    async function loadSubs(){
+      const day = daySelect.value;
+      dayLabel.textContent = day;
+      statusBar.textContent = 'Loading…';
+      subsTableBody.innerHTML = '';
+      try {
+        const resp = await fetch(`/api/picks/public?day=${encodeURIComponent(day)}`);
+        if(!resp.ok){ throw new Error('HTTP ' + resp.status); }
+        const data = await resp.json();
+        if(!data.ok){ throw new Error(data.error || 'error'); }
+        const entries = data.entries || {};
+        const rows = Object.keys(entries).sort().map(email => {
+          const rec = entries[email] || {}; const picks = rec.picks || []; const ts = rec.ts;
+          return { email, picks, ts };
+        });
+        if(!rows.length){
+          const tr = document.createElement('tr');
+          const td = document.createElement('td'); td.colSpan = 3; td.style.textAlign='center'; td.style.padding='18px 0'; td.textContent = 'No submissions yet.'; tr.appendChild(td); subsTableBody.appendChild(tr);
+        } else {
+          rows.forEach(r => {
+            const tr = document.createElement('tr');
+            const tdE = document.createElement('td'); tdE.textContent = r.email; tr.appendChild(tdE);
+            const tdP = document.createElement('td'); tdP.className = 'picks-cell';
+            r.picks.forEach(p => { const span = document.createElement('span'); span.textContent = p || '—'; tdP.appendChild(span); });
+            tr.appendChild(tdP);
+            const tdT = document.createElement('td'); tdT.textContent = fmtTs(r.ts); tr.appendChild(tdT);
+            subsTableBody.appendChild(tr);
+          });
+        }
+        statusBar.textContent = `Loaded ${rows.length} submissions.`;
+        lastUpdate.textContent = 'Updated ' + new Date().toLocaleTimeString();
+      } catch(err){
+        statusBar.innerHTML = `<span class="error">Error: ${err.message}</span>`;
+      }
+    }
+
+    function schedule(){
+      if(timer){ clearInterval(timer); timer=null; }
+      const sec = parseInt(autoSelect.value, 10) || 0;
+      if(sec > 0){ timer = setInterval(loadSubs, sec * 1000); }
+    }
+
+    refreshBtn.addEventListener('click', loadSubs);
+    daySelect.addEventListener('change', loadSubs);
+    autoSelect.addEventListener('change', schedule);
+
+    // Initial
+    loadSubs();
+    schedule();
+  </script>
+</body>
+</html>
