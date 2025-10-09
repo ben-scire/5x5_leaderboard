@@ -1,19 +1,23 @@
-// Minimal new week config (Thursday-only picks to start).
-// We purposely strip prior week static data; dynamic data now comes from unified picks API.
-// If a value is missing client code will fallback gracefully.
-window.LIVE_FETCH_ENABLED = true;
+// Minimal new week config (Thursday-only picks to start), augmented with placeholders
+// so existing scripts (which expect all weekday keys) do not throw.
+window.LIVE_FETCH_ENABLED = true; // enable live API usage for new week
 
-// Nicknames (retain for display)
-const nicknameMap = {
-  'adam.schmidt520@gmail.com':'Schmidt','conor.murphy30@gmail.com':'Murph','finsmaniac1551@gmail.com':'Nick','goodnoughdylan@gmail.com':'Dylan','hankrudden@yahoo.com':'Hank','jakelehman100@gmail.com':'Jake','jlindsey3428@gmail.com':'JLinds','kylejkz11@gmail.com':'Kyle','lukeanastasi5@gmail.com':'Luke','max1solov@gmail.com':'Solov','mzanin98@gmail.com':'Matteo','samuel.lehman3337@gmail.com':'Sam','scire.ben@gmail.com':'Ben','shawnscottcarl@gmail.com':'Shawn','timjbohlman@gmail.com':'Bohlman','williamjabbott22@gmail.com':'Abbo','wyaggy3@gmail.com':'Wyatt'
+// Nicknames removed per request; display raw email prefixes / full email.
+const nicknameMap = {}; // kept as empty object to avoid errors where referenced
+
+// Labels: New Thursday triple pick (Spread, Total, Prop) + empty arrays for other days to avoid undefined lookups
+const picksLabels = {
+  'Thurs': [ 'NFL: PHI -7.5 @ NYG', 'Total: PHI/NYG O/U 40.5', 'Anytime TD: Dart OR A.J. Brown' ],
+  'Fri': [], 'Sat': [], 'Sun': [], 'Mon': []
 };
 
-// Labels: New Thursday triple pick (Spread, Total, Prop)
-const picksLabels = { 'Thurs': [ 'NFL: PHI -7.5 @ NYG', 'Total: PHI/NYG O/U 40.5', 'Anytime TD: Dart OR A.J. Brown' ] };
+// Users start empty; will be populated on first submission via live APIs (leaderboard_live.js) or manual picks injection.
+const users = []; // leaderboard.js will show nothing until at least one pick recorded
 
 // Empty containers – will fill as users submit (server persists in picks.json)
-const userPicks = { 'Thurs': {} };
-const coveredPicks = { 'Thurs': [] }; // winners TBD
+const userPicks = { 'Thurs': {}, 'Fri': {}, 'Sat': {}, 'Sun': {}, 'Mon': {} };
+// Winners placeholders for each day (avoid undefined access in normalization logic)
+const coveredPicks = { 'Thurs': [], 'Fri': [], 'Sat': [], 'Sun': [], 'Mon': [] }; // winners TBD
 
 // Focus Thursday initially
 let currentDay = 'Thurs';
@@ -25,4 +29,4 @@ const saturdayGames = []; const saturdayStates = [];
 const sundayGames = []; const sundayStartTimes = []; const sundayStates = [];
 const mondayGames = []; const mondayStartTimes = []; const mondayStates = [];
 
-window._lbConfig = { nicknameMap, picksLabels, userPicks, coveredPicks, fridayGames, saturdayGames, sundayGames, mondayGames, sundayStartTimes, mondayStartTimes };
+window._lbConfig = { users, nicknameMap, picksLabels, userPicks, coveredPicks, fridayGames, saturdayGames, sundayGames, mondayGames, sundayStartTimes, mondayStartTimes };
