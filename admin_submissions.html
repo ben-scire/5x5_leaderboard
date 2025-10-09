@@ -56,6 +56,7 @@
           <th style="width:200px;">Email</th>
           <th>Picks</th>
           <th style="width:120px;">Timestamp</th>
+          <th style="width:100px;">Actions</th>
         </tr>
       </thead>
       <tbody></tbody>
@@ -95,7 +96,7 @@
         });
         if(!rows.length){
           const tr = document.createElement('tr');
-          const td = document.createElement('td'); td.colSpan = 3; td.style.textAlign='center'; td.style.padding='18px 0'; td.textContent = 'No submissions yet.'; tr.appendChild(td); subsTableBody.appendChild(tr);
+          const td = document.createElement('td'); td.colSpan = 4; td.style.textAlign='center'; td.style.padding='18px 0'; td.textContent = 'No submissions yet.'; tr.appendChild(td); subsTableBody.appendChild(tr);
         } else {
           rows.forEach(r => {
             const tr = document.createElement('tr');
@@ -104,6 +105,9 @@
             r.picks.forEach(p => { const span = document.createElement('span'); span.textContent = p || '—'; tdP.appendChild(span); });
             tr.appendChild(tdP);
             const tdT = document.createElement('td'); tdT.textContent = fmtTs(r.ts); tr.appendChild(tdT);
+            const tdA = document.createElement('td');
+            const btn = document.createElement('button'); btn.textContent='Delete'; btn.style.background='#5d1f1f'; btn.style.border='1px solid #7a2a2a'; btn.style.fontSize='12px'; btn.addEventListener('click', ()=> attemptDelete(r.email));
+            tdA.appendChild(btn); tr.appendChild(tdA);
             subsTableBody.appendChild(tr);
           });
         }
@@ -123,6 +127,24 @@
     refreshBtn.addEventListener('click', loadSubs);
     daySelect.addEventListener('change', loadSubs);
     autoSelect.addEventListener('change', schedule);
+
+    async function attemptDelete(email){
+      const day = daySelect.value;
+      const adminEmail = prompt('Admin email (for confirmation):');
+      if(!adminEmail) return;
+      const phrase = prompt('Admin phrase:');
+      if(!phrase) return;
+      if(!confirm(`Delete picks for ${email} on ${day}?`)) return;
+      try {
+        const resp = await fetch('/api/admin/delete_pick', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ adminEmail, phrase, day, email }) });
+        const data = await resp.json();
+        if(!resp.ok || !data.ok){
+          alert('Delete failed: ' + (data.error || resp.status));
+          return;
+        }
+        loadSubs();
+      } catch(e){ alert('Network error: ' + e.message); }
+    }
 
     // Initial
     loadSubs();
