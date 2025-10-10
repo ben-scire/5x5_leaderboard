@@ -13,8 +13,14 @@
     input[type=email],input[type=text]{width:100%;padding:8px 10px;border:1px solid #314355;background:#0f1419;color:#e5e5e5;border-radius:6px;font-size:14px;} 
     input[type=text]{text-transform:uppercase;} 
     .row{margin-bottom:14px;} 
-    button{background:#1976d2;color:#fff;font-weight:600;border:none;padding:10px 18px;border-radius:6px;cursor:pointer;} 
+  button{background:#1976d2;color:#fff;font-weight:600;border:none;padding:10px 18px;border-radius:6px;cursor:pointer;transition:background .15s, box-shadow .15s;} 
     button:disabled{background:#274865;opacity:.6;cursor:not-allowed;} 
+  button.mc{background:#233345;padding:10px 16px;font-size:14px;border:1px solid #35526b;border-radius:24px;letter-spacing:.5px;min-width:72px;text-transform:uppercase;position:relative;}
+  button.mc:hover{background:#2d4660;}
+  button.mc.selected{background:#00897b;border-color:#00bfa5;box-shadow:0 0 0 2px rgba(0,191,165,0.25);}
+  button.mc.selected::after{content:'\2713';position:absolute;top:-6px;right:-6px;background:#00bfa5;color:#062a27;font-size:12px;width:20px;height:20px;display:flex;align-items:center;justify-content:center;border-radius:50%;box-shadow:0 2px 4px -2px #000;}
+  .match{background:#152027;padding:12px 14px;border:1px solid #22323e;border-radius:10px;}
+  .btnrow{display:flex;gap:10px;flex-wrap:wrap;}
     #status{font-size:12px;margin-left:12px;color:#90caf9;} 
     .note{font-size:12px;color:#888;margin-top:6px;} 
     .success{color:#66ffa6;} .error{color:#ff6b6b;} 
@@ -45,7 +51,7 @@
       const host = document.getElementById('matchups');
       host.innerHTML = labels.map((l,i)=>{
         const opts = MATCHUP_CHOICES[i] || [];
-        const btns = opts.map(team=>`<button type='button' class='mc' data-idx='${i}' data-val='${team}'>${team}</button>`).join('');
+  const btns = opts.map(team=>`<button type='button' class='mc' data-idx='${i}' data-val='${team}' aria-pressed='false'>${team}</button>`).join('');
         return `<div class='match' style='margin-bottom:14px;'>
           <div style='font-size:13px;font-weight:600;margin-bottom:6px;'>${l}</div>
           <div class='btnrow' data-group='${i}' style='display:flex;gap:8px;flex-wrap:wrap;'>${btns}</div>
@@ -56,8 +62,9 @@
         btn.addEventListener('click', e=>{
           const b = e.currentTarget; const idx = b.getAttribute('data-idx'); const val = b.getAttribute('data-val');
           // clear selection in group
-          host.querySelectorAll(`button.mc[data-idx='${idx}']`).forEach(o=> o.classList.remove('selected'));
-            b.classList.add('selected');
+          host.querySelectorAll(`button.mc[data-idx='${idx}']`).forEach(o=> { o.classList.remove('selected'); o.setAttribute('aria-pressed','false'); });
+          b.classList.add('selected');
+          b.setAttribute('aria-pressed','true');
           const hidden = host.querySelector(`input[data-idx='${idx}']`);
           if(hidden) hidden.value = val;
         });
