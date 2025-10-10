@@ -44,6 +44,11 @@
   <!-- Day Toggle (moved here between leaderboard and scoreboard) -->
   <div id="dayToggleBar" class="day-toggle-bar"></div>
 
+  <!-- Live Leaderboard Table (backend /api/leaderboard). Hidden if Chart.js already visualizes; kept for accessibility & debugging -->
+  <div style="margin:12px 0 24px;">
+    <table id="leaderboardTable" class="legacy-leaderboard" style="width:100%;border-collapse:collapse;font-size:12px;display:none;"></table>
+  </div>
+
   <!-- Final Scoreboard -->
   <div id="gamesWrap">
     <div class="scoreboard-heading accented" id="scoresTitle">Scores</div>
