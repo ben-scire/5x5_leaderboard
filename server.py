@@ -609,7 +609,29 @@ def load_unified_picks():
         return {}
     try:
         with UNIFIED_PICKS_FILE.open('r', encoding='utf-8') as f:
-            return json.load(f) or {}
+            data = json.load(f) or {}
+        # Merge legacy root picks.json if it has days missing from current unified file (e.g. Thu not copied earlier)
+        try:
+            legacy_root = APP_ROOT / 'picks.json'
+            if legacy_root.exists():
+                with legacy_root.open('r', encoding='utf-8') as lf:
+                    legacy = json.load(lf) or {}
+                changed = False
+                for day, day_map in (legacy or {}).items():
+                    if day not in data or not data.get(day):
+                        if isinstance(day_map, dict):
+                            data[day] = day_map
+                            changed = True
+                if changed:
+                    # Write back merged data (avoid calling save_unified_picks earlier to prevent recursion risk)
+                    tmp = UNIFIED_PICKS_FILE.with_suffix('.tmp')
+                    with tmp.open('w', encoding='utf-8') as wf:
+                        json.dump(data, wf, indent=2)
+                    tmp.replace(UNIFIED_PICKS_FILE)
+                    print('[PICKS][INFO] Merged missing day(s) from legacy root picks.json into data/picks.json')
+        except Exception as e:
+            print('[PICKS][WARN] Failed merging legacy root picks.json:', e)
+        return data
     except Exception:
         return {}
 
