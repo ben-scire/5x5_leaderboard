@@ -129,18 +129,7 @@
   async function refresh(){
     if(!schedule){ schedule = await fetchJSON(SCHED_API); if(schedule && schedule.ok){ schedule = schedule.schedule || schedule; buildDayToggle(schedule.days||{}); renderGamesTable(); } }
     leaderboard = await fetchJSON(LB_API) || leaderboard;
-    // Pre-kickoff fallback: if no graded entries yet, try public submission status endpoint for emails
-    try {
-      if((!leaderboard || !(leaderboard.entries||[]).length) && typeof fetch!=='undefined'){
-        const status = await fetchJSON('/picks/sunday/status');
-        if(status && Array.isArray(status.submitted) && status.submitted.length){
-          // Inject synthetic leaderboard object to drive email display (scores all zero)
-          leaderboard = leaderboard || { entries:[], dayOrder: Object.keys((schedule&&schedule.days)||{}), totalPossible:0 };
-          const existingEmails = new Set((leaderboard.entries||[]).map(e=>e.email));
-            status.submitted.forEach(em=>{ if(!existingEmails.has(em)){ leaderboard.entries.push({ email:em, score:0, answered:0, perDay:{} }); existingEmails.add(em); } });
-        }
-      }
-    } catch(fbErr){ console.warn('[live] fallback status fetch failed', fbErr); }
+    // Removed legacy Sunday fallback (/picks/sunday/status) to avoid 404 noise.
     renderLeaderboardChart();
   }
 

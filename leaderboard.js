@@ -647,10 +647,10 @@ async function updateNFLGame(){
     nflState.meta = { coverProb, totalProb, favored: nflGame.lineHome<0? 'HOME':'AWAY', home:{abbr:nflGame.homeAbbr}, away:{abbr:nflGame.awayAbbr}, homeColor:mapColorNFL(nflGame.homeAbbr), awayColor:mapColorNFL(nflGame.awayAbbr) };
     if(status === 'STATUS_FINAL'){
       const spreadCover = determineCoverSpread(parseInt(home.score,10), parseInt(away.score,10), nflGame.lineHome);
-  if(spreadCover==='HOME') coveredPicks['Thu'][0] = 'GB'; else if(spreadCover==='AWAY') coveredPicks['Thu'][0] = 'WASH'; else coveredPicks['Thu'][0] = 'PUSH';
+      if(spreadCover==='HOME') coveredPicks['Thu'][0] = nflGame.homeAbbr; else if(spreadCover==='AWAY') coveredPicks['Thu'][0] = nflGame.awayAbbr; else coveredPicks['Thu'][0] = 'PUSH';
       const totalPts = parseInt(home.score,10)+parseInt(away.score,10);
-  if(totalPts > nflGame.total) coveredPicks['Thu'][1] = 'Over'; else if(totalPts < nflGame.total) coveredPicks['Thu'][1] = 'Under'; else coveredPicks['Thu'][1] = 'PUSH';
-  recalcPoints('Thu'); recalcTotal(); updateLeaderboard(); renderPicksTable(picksDay);
+      if(totalPts > nflGame.total) coveredPicks['Thu'][1] = 'Over'; else if(totalPts < nflGame.total) coveredPicks['Thu'][1] = 'Under'; else coveredPicks['Thu'][1] = 'PUSH';
+      recalcPoints('Thu'); recalcTotal(); updateLeaderboard(); renderPicksTable(picksDay);
     }
     updateScoreboard();
   } catch(err){ console.warn('Failed NFL fetch', err); }
