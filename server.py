@@ -77,6 +77,8 @@ def _add_cache_headers(resp):
 # --- Simple persistent storage for Friday picks (new feature) ---
 FRIDAY_FILE = pathlib.Path('data/picks/friday_picks.json')
 FRIDAY_CSV_LOG = pathlib.Path('data/picks/friday_picks_log.csv')
+FRIDAY_LOCK_FILE = pathlib.Path('data/picks/friday_locked.json')
+FRIDAY_LOCK_STATUS = pathlib.Path('data/picks/friday_lock_status.json')
 FRIDAY_LABELS = [
     'NCAAF: USF +1.5 @ UNT (pick team)',
     'NCAAF: Rutgers +10.5 @ WASH (pick team)'
@@ -124,6 +126,65 @@ def _append_friday_csv(email: str, picks: list):
     except Exception:
         pass  # logging failure is non-fatal
 
+def _is_friday_locked():
+    return FRIDAY_LOCK_FILE.exists()
+
+def _load_friday_locked():
+    if FRIDAY_LOCK_FILE.exists():
+        try:
+            with FRIDAY_LOCK_FILE.open('r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception:
+            return {}
+    return {}
+
+def _snapshot_latest_from_log():
+    """Read the CSV log and produce a dict of latest picks per email (overwriting earlier rows)."""
+    if not FRIDAY_CSV_LOG.exists():
+        # Fallback to in-memory
+        return FRIDAY_PICKS.copy()
+    latest = {}
+    try:
+        with FRIDAY_CSV_LOG.open('r', encoding='utf-8') as f:
+            lines = f.read().strip().splitlines()
+        if not lines:
+            return FRIDAY_PICKS.copy()
+        header = lines[0].split(',')
+        # Expect: ts_iso,email,pick1,pick2,...
+        for line in lines[1:]:
+            if not line.strip():
+                continue
+            parts = line.split(',')
+            if len(parts) < 2 + len(FRIDAY_LABELS):
+                continue
+            ts = parts[0]
+            email = parts[1].strip().lower()
+            picks = [p.strip().upper() for p in parts[2:2+len(FRIDAY_LABELS)]]
+            latest[email] = picks
+        return latest
+    except Exception:
+        return FRIDAY_PICKS.copy()
+
+def _write_friday_locked(snapshot: dict):
+    try:
+        FRIDAY_LOCK_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with FRIDAY_LOCK_FILE.open('w', encoding='utf-8') as f:
+            json.dump({ 'lockedAt': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()), 'picks': snapshot }, f, indent=2)
+        with FRIDAY_LOCK_STATUS.open('w', encoding='utf-8') as f:
+            json.dump({ 'locked': True, 'lockedAt': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()) }, f)
+        return True
+    except Exception:
+        return False
+
+def _load_friday_lock_status():
+    if FRIDAY_LOCK_STATUS.exists():
+        try:
+            with FRIDAY_LOCK_STATUS.open('r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception:
+            return { 'locked': True }
+    return { 'locked': False }
+
 FRIDAY_PICKS = _load_friday()  # email -> list[str]
 
 @app.route('/api/picks/friday/labels')
@@ -141,6 +202,8 @@ def friday_submit():
     payload = request.get_json(force=True, silent=True) or {}
     email = (payload.get('email') or '').strip().lower()
     picks = payload.get('picks') or []
+    if _is_friday_locked():
+        return jsonify({ 'ok': False, 'error': 'locked' }), 403
     if not email:
         return jsonify({ 'ok': False, 'error': 'email_required' }), 400
     if not isinstance(picks, list) or len(picks) != len(FRIDAY_LABELS):
@@ -164,12 +227,17 @@ def friday_all():
                 continue
             d = counts[i]
             d[val] = d.get(val, 0) + 1
+    locked = _is_friday_locked()
+    lockedData = _load_friday_locked() if locked else None
     return jsonify({
         'ok': True,
         'labels': FRIDAY_LABELS,
         'totalSubmissions': len(FRIDAY_PICKS),
         'picks': FRIDAY_PICKS,
-        'counts': counts
+        'counts': counts,
+        'locked': locked,
+        'lockedSnapshot': lockedData.get('picks') if lockedData else None,
+        'lockedAt': lockedData.get('lockedAt') if lockedData else None
     })
 
 @app.route('/api/picks/friday/status')
@@ -178,7 +246,29 @@ def friday_status():
     submitted = sorted(FRIDAY_PICKS.keys())
     # Use Thursday ALL_USERS as the pool; if override file replaced, ALL_USERS already reflects it.
     missing = [u for u in ALL_USERS if u not in FRIDAY_PICKS]
-    return jsonify({ 'ok': True, 'submitted': submitted, 'missing': missing, 'submittedCount': len(submitted), 'missingCount': len(missing) })
+    return jsonify({ 'ok': True, 'submitted': submitted, 'missing': missing, 'submittedCount': len(submitted), 'missingCount': len(missing), 'locked': _is_friday_locked() })
+
+@app.route('/api/picks/friday/lock', methods=['POST'])
+def friday_lock():
+    if _is_friday_locked():
+        # Already locked: return existing info
+        data = _load_friday_locked()
+        return jsonify({ 'ok': True, 'alreadyLocked': True, 'lockedAt': data.get('lockedAt'), 'count': len(data.get('picks', {})) })
+    snapshot = _snapshot_latest_from_log()
+    if not snapshot:
+        snapshot = FRIDAY_PICKS.copy()
+    if not _write_friday_locked(snapshot):
+        return jsonify({ 'ok': False, 'error': 'lock_write_failed' }), 500
+    return jsonify({ 'ok': True, 'locked': True, 'count': len(snapshot) })
+
+@app.route('/api/picks/friday/lock/status')
+def friday_lock_status():
+    st = _load_friday_lock_status()
+    if st.get('locked'):
+        data = _load_friday_locked()
+        st['count'] = len(data.get('picks', {}))
+        st['emails'] = sorted(data.get('picks', {}).keys())
+    return jsonify({ 'ok': True, **st })
 
 @app.route('/api/picks/friday/log')
 def friday_log():
