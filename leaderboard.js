@@ -563,6 +563,9 @@ function rowClass(status){ if(status==='STATUS_FINAL') return 'final-row'; if(st
 function updateScoreboard(){
   const tbl = document.getElementById('gamesTable');
   if(!tbl) return;
+  // Diagnostics: detect legacy key or missing global
+  if(typeof nflGame==='undefined' && window.nflGame){ console.warn('[Scoreboard] nflGame var undefined; binding window.nflGame'); window.nflGame = window.nflGame; }
+  if(typeof nflGame==='undefined'){ console.warn('[Scoreboard] nflGame still undefined; scoreboard will show placeholders'); }
   if(!scoreboardDay){
     const now = new Date();
     const dow = now.getDay(); // 0=Sun..6=Sat
@@ -573,6 +576,7 @@ function updateScoreboard(){
     else if(dow===6) scoreboardDay='Sat';
     else scoreboardDay='Sat'; // Tue/Wed default to upcoming Saturday slate
   }
+  if(scoreboardDay==='Thurs'){ console.warn('[Scoreboard] Normalizing legacy day key "Thurs" to "Thu"'); scoreboardDay='Thu'; }
   const meta = (day)=> day==='Thu'? { games:[nflGame].filter(Boolean), states:[nflState].filter(Boolean), times:[] } :
     day==='Fri'? { games:fridayGames, states:fridayStates, times:fridayStartTimes } :
     day==='Sat'? { games:saturdayGames, states:saturdayStates, times:saturdayStartTimes } :
@@ -678,7 +682,11 @@ async function updateNFLGame(){
   } catch(err){ console.warn('Failed NFL fetch', err); }
 }
 
+// Guarded CFB updater (some weeks have NO Thursday college game). Avoid ReferenceError when collegeGame undefined.
+if(typeof window.collegeGame === 'undefined') { window.collegeGame = null; }
+if(typeof window.collegeState === 'undefined') { window.collegeState = { status:'STATUS_SCHEDULED', home:0, away:0 }; }
 async function updateCollegeGame(){
+  if(!collegeGame || !collegeGame.eventId){ return; }
   try { const resp = await fetch(`https://site.api.espn.com/apis/site/v2/sports/football/college-football/summary?event=${collegeGame.eventId}`); if(!resp.ok) throw new Error('HTTP '+resp.status); const data = await resp.json();
     const game = data.header.competitions[0]; const status = game.status.type.name; const home = game.competitors.find(c=>c.homeAway==='home'); const away = game.competitors.find(c=>c.homeAway==='away');
     if(data.drives && data.drives.current){ const d = data.drives.current; collegeState.drive = { possession: d.team && d.team.id, downDistanceText: d.displayResult ? null : d.shortDisplayResult, shortDownDistanceText: d.shortDownDistanceText || d.downDistanceText, yardsToEndzone: d.yardsToEndzone, start: d.start && { yardLine: d.start.yardLine, team: d.start.team }, current: d.end && { yardLine: d.end.yardLine, team: d.end.team }, clock: game.status && game.status.displayClock ? { displayValue: game.status.displayClock } : null, isRedZone: d.isRedZone, teamIds: { [away.team.id]: away.team.id, [home.team.id]: home.team.id }, homeTeamId: home.team.id, awayTeamId: away.team.id, plays: d.plays && d.plays.length ? d.plays.length : d.playCount, yards: d.yards, timeElapsed: d.timeElapsed || (d.start && d.end && d.end.clock && d.end.clock.displayValue), yardsToGo: d.yardsToGo || d.distance }; ensureBallSpot(collegeState.drive, data); } else { collegeState.drive = null; }
