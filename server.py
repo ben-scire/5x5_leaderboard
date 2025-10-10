@@ -84,6 +84,27 @@ FRIDAY_LABELS = [
     'NCAAF: Rutgers +10.5 @ WASH (pick team)'
 ]
 
+# Static Friday schedule (live board) with ESPN event IDs.
+# Lines chosen to match displayed pick lines (not necessarily latest market line).
+FRIDAY_SCHEDULE = [
+    {
+        'eventId': '401762481',
+        'away': 'South Florida', 'awayAbbr': 'USF',
+        'home': 'North Texas',   'homeAbbr': 'UNT',
+        'lineHome': -1.5,
+        'total': None,
+        'start': '2025-10-10T23:30:00Z'
+    },
+    {
+        'eventId': '401752862',
+        'away': 'Rutgers',    'awayAbbr': 'RUT',
+        'home': 'Washington', 'homeAbbr': 'WASH',
+        'lineHome': -10.5,
+        'total': None,
+        'start': '2025-10-11T01:00:00Z'
+    }
+]
+
 def _load_friday():
     if FRIDAY_FILE.exists():
         try:
@@ -362,6 +383,13 @@ def api_picks_public():
             'ok': True,
             'entries': { email: { 'picks': HARD_PICKS[email], 'ts': now } for email in ALL_USERS }
         })
+    if day.startswith('fri'):
+        now = int(time.time()*1000)
+        # Expose Friday picks (latest submission per email) – already uppercased
+        return jsonify({
+            'ok': True,
+            'entries': { email: { 'picks': picks, 'ts': now } for email, picks in FRIDAY_PICKS.items() }
+        })
     return jsonify({ 'ok': False, 'error': 'unsupported_day' }), 400
 
 @app.route('/api/debug/thu')
@@ -373,6 +401,18 @@ def api_debug_thu():
 @app.route('/healthz')
 def healthz():
     return jsonify({ 'ok': True, 'version': VERSION, 'users': len(ALL_USERS), 'results': RESULTS, 'source': SOURCE })
+
+@app.route('/api/schedule')
+def api_schedule():
+    """Provide minimal schedule JSON consumed by schedule_init.js for live Friday board."""
+    # Thursday left minimal (historical). Only supply Friday picks & games for now.
+    days = {
+        'Fri': {
+            'games': FRIDAY_SCHEDULE,
+            'picks': [ { 'label': lbl } for lbl in FRIDAY_LABELS ]
+        }
+    }
+    return jsonify({ 'ok': True, 'version': VERSION, 'days': days })
 
 @app.route('/')
 def root():
