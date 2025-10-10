@@ -40,9 +40,28 @@
       const j = await r.json();
       return j.labels || [];
     }
+    const MATCHUP_CHOICES = [ ['USF','UNT'], ['RUT','WASH'] ];
     function renderInputs(labels){
       const host = document.getElementById('matchups');
-      host.innerHTML = labels.map((l,i)=>`<div style='margin-bottom:10px;'><label>${l}<input data-idx='${i}' type='text' placeholder='Team pick'></label></div>`).join('');
+      host.innerHTML = labels.map((l,i)=>{
+        const opts = MATCHUP_CHOICES[i] || [];
+        const btns = opts.map(team=>`<button type='button' class='mc' data-idx='${i}' data-val='${team}'>${team}</button>`).join('');
+        return `<div class='match' style='margin-bottom:14px;'>
+          <div style='font-size:13px;font-weight:600;margin-bottom:6px;'>${l}</div>
+          <div class='btnrow' data-group='${i}' style='display:flex;gap:8px;flex-wrap:wrap;'>${btns}</div>
+          <input type='hidden' data-idx='${i}' />
+        </div>`;
+      }).join('');
+      host.querySelectorAll('button.mc').forEach(btn=>{
+        btn.addEventListener('click', e=>{
+          const b = e.currentTarget; const idx = b.getAttribute('data-idx'); const val = b.getAttribute('data-val');
+          // clear selection in group
+          host.querySelectorAll(`button.mc[data-idx='${idx}']`).forEach(o=> o.classList.remove('selected'));
+            b.classList.add('selected');
+          const hidden = host.querySelector(`input[data-idx='${idx}']`);
+          if(hidden) hidden.value = val;
+        });
+      });
     }
     async function loadExisting(){
       const email = document.getElementById('email').value.trim().toLowerCase();
@@ -62,8 +81,9 @@
       const email = document.getElementById('email').value.trim().toLowerCase();
       const status = document.getElementById('status');
       if(!email){ status.textContent='Enter email'; status.className='error'; return; }
-      const inputs = Array.from(document.querySelectorAll('#matchups input[data-idx]'));
-      const picks = inputs.map(inp=> (inp.value||'').trim().toUpperCase());
+  const inputs = Array.from(document.querySelectorAll('#matchups input[data-idx]'));
+  const picks = inputs.map(inp=> (inp.value||'').trim().toUpperCase());
+  if(picks.some(p=>!p)){ status.textContent='Select all picks'; status.className='error'; return; }
       status.textContent='Saving...'; status.className='';
       try {
         const r = await fetch('/api/picks/friday/submit',{method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ email, picks })});

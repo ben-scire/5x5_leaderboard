@@ -129,7 +129,9 @@ function _norm(raw){
 function picksMatch(pick, cover){
   if(!pick || !cover) return false;
   if(cover==='PUSH') return false;
-  if(cover==='Over' || cover==='Under') return pick===cover; // exact for totals
+  const p = (pick||'').toString().trim().toUpperCase();
+  const c = (cover||'').toString().trim().toUpperCase();
+  if(c==='OVER' || c==='UNDER') return p===c; // case-insensitive exact for totals
   return _norm(pick) === _norm(cover);
 }
 
@@ -204,7 +206,8 @@ try {
   }
   // Force Thursday TOTAL (index 1) to OVER if not already set (server final says OVER)
   if (Array.isArray(coveredPicks['Thu'])) {
-    if (coveredPicks['Thu'][1] == null || /^(under)$/i.test(coveredPicks['Thu'][1])) {
+    const cur = (coveredPicks['Thu'][1]||'').toString().toUpperCase();
+    if (!cur || cur==='UNDER') {
       coveredPicks['Thu'][1] = 'OVER';
       if (typeof recalcPoints === 'function') { recalcPoints('Thu'); }
       if (typeof recalcTotal === 'function') { recalcTotal(); }
