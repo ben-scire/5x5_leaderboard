@@ -872,6 +872,36 @@ window.addEventListener('load', async () => {
   } else {
     console.log('[Init] LIVE_FETCH_ENABLED=false; skipping initial fetches/ingest');
   }
+  // --- THURSDAY-ONLY MODE OVERRIDE ---
+  try {
+    // Force final covered picks (NYG, Over, YES) irrespective of live fetch status
+    if(!Array.isArray(coveredPicks['Thu'])) coveredPicks['Thu'] = [];
+    coveredPicks['Thu'][0] = 'NYG';
+    coveredPicks['Thu'][1] = 'Over';
+    coveredPicks['Thu'][2] = 'YES';
+    // If we have not yet loaded user picks for Thursday (legacy path), pull them now
+    if(Object.keys(userPicks['Thu']||{}).length===0){
+      try {
+        const r = await fetch('/api/picks/public?day=Thu',{cache:'no-store'});
+        if(r.ok){
+          const j = await r.json();
+          const entries = (j && j.entries) || {};
+          Object.keys(entries).forEach(email=>{
+            const arr = (entries[email].picks||[]).slice(0,3); // only first 3 relevant for Thu
+            while(arr.length<3) arr.push('');
+            userPicks['Thu'][email] = arr;
+            if(Array.isArray(users) && !users.find(u=>u.username===email)) users.push({ username:email, thurs:0,fri:0,sat:0,sun:0,mon:0,total:0 });
+          });
+        }
+      } catch(fetchErr){ console.warn('[ThuOnly] failed loading Thu picks', fetchErr); }
+    }
+    // Recalculate strictly Thursday scores
+    recalcPoints('Thu');
+    recalcTotal();
+    updateLeaderboard();
+    renderPicksTable('Thu');
+    console.log('[ThuOnly] Forced Thursday final results applied (NYG / Over / YES).');
+  } catch(thErr){ console.warn('[ThuOnly] override failed', thErr); }
   updateScoreboard(); setTimeout(()=>{ document.getElementById('leaderboardChart').classList.add('winner-glow'); },150);
   // Removed periodic forced update that previously animated gradient title (no longer needed)
   // Disabled periodic live polling (was every 45s) to reduce network noise per updated requirements.
