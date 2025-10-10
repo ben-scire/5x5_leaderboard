@@ -60,6 +60,7 @@ app = Flask(__name__, static_folder='.', static_url_path='')
 
 # --- Simple persistent storage for Friday picks (new feature) ---
 FRIDAY_FILE = pathlib.Path('data/picks/friday_picks.json')
+FRIDAY_CSV_LOG = pathlib.Path('data/picks/friday_picks_log.csv')
 FRIDAY_LABELS = [
     'NCAAF: USF +1.5 @ UNT (pick team)',
     'NCAAF: Rutgers +10.5 @ WASH (pick team)'
@@ -92,6 +93,20 @@ def _save_friday(data: dict):
         return True
     except Exception:
         return False
+def _append_friday_csv(email: str, picks: list):
+    """Append a single submission row to the CSV log (best-effort, never raises)."""
+    try:
+        FRIDAY_CSV_LOG.parent.mkdir(parents=True, exist_ok=True)
+        is_new = not FRIDAY_CSV_LOG.exists()
+        with FRIDAY_CSV_LOG.open('a', encoding='utf-8') as f:
+            if is_new:
+                f.write('ts_iso,email,' + ','.join([f'pick{i+1}' for i in range(len(FRIDAY_LABELS))]) + '\n')
+            ts = time.strftime('%Y-%m-%dT%H:%M:%S', time.gmtime())
+            row = [ts, email] + picks
+            safe = [c.replace('\n',' ').replace('\r',' ').replace(',',' ') for c in row]
+            f.write(','.join(safe) + '\n')
+    except Exception:
+        pass  # logging failure is non-fatal
 
 FRIDAY_PICKS = _load_friday()  # email -> list[str]
 
@@ -118,6 +133,7 @@ def friday_submit():
     FRIDAY_PICKS[email] = norm
     if not _save_friday(FRIDAY_PICKS):
         return jsonify({ 'ok': False, 'error': 'persist_failed' }), 500
+    _append_friday_csv(email, norm)
     return jsonify({ 'ok': True, 'saved': True })
 
 @app.route('/api/picks/friday/all')
@@ -139,6 +155,61 @@ def friday_all():
         'picks': FRIDAY_PICKS,
         'counts': counts
     })
+
+@app.route('/api/picks/friday/log')
+def friday_log():
+    # Return entire CSV log as text (small scale). If large, could stream.
+    if not FRIDAY_CSV_LOG.exists():
+        return jsonify({ 'ok': True, 'empty': True, 'message': 'no_log' })
+    try:
+        with FRIDAY_CSV_LOG.open('r', encoding='utf-8') as f:
+            content = f.read()
+        return app.response_class(content, mimetype='text/csv')
+    except Exception as e:
+        return jsonify({ 'ok': False, 'error': 'log_read_failed', 'detail': str(e) }), 500
+
+@app.route('/api/picks/friday/log/info')
+def friday_log_info():
+    """Lightweight metadata about the CSV log so you can monitor without downloading full file."""
+    if not FRIDAY_CSV_LOG.exists():
+        return jsonify({ 'ok': True, 'exists': False })
+    try:
+        stat = FRIDAY_CSV_LOG.stat()
+        size = stat.st_size
+        mtime = time.strftime('%Y-%m-%dT%H:%M:%S', time.gmtime(stat.st_mtime))
+        # Count rows cheaply (could be optimized if file grows, fine for small scale)
+        with FRIDAY_CSV_LOG.open('r', encoding='utf-8') as f:
+            lines = f.read().strip().splitlines()
+        rows = max(0, len(lines) - 1) if lines else 0  # exclude header
+        return jsonify({ 'ok': True, 'exists': True, 'sizeBytes': size, 'modified': mtime, 'rowCount': rows })
+    except Exception as e:
+        return jsonify({ 'ok': False, 'error': 'log_info_failed', 'detail': str(e) }), 500
+
+@app.route('/api/picks/friday/log/latest')
+def friday_log_latest():
+    # Quick JSON variant: last N (default 50) rows
+    limit = int(request.args.get('n', '50'))
+    if limit < 1: limit = 1
+    if limit > 500: limit = 500
+    if not FRIDAY_CSV_LOG.exists():
+        return jsonify({ 'ok': True, 'rows': [] })
+    try:
+        with FRIDAY_CSV_LOG.open('r', encoding='utf-8') as f:
+            lines = f.read().strip().splitlines()
+        if not lines:
+            return jsonify({ 'ok': True, 'rows': [] })
+        header, *body = lines
+        tail = body[-limit:]
+        cols = header.split(',')
+        rows = []
+        for line in tail:
+            parts = line.split(',')
+            if len(parts) != len(cols):
+                continue
+            rows.append(dict(zip(cols, parts)))
+        return jsonify({ 'ok': True, 'rows': rows, 'count': len(rows) })
+    except Exception as e:
+        return jsonify({ 'ok': False, 'error': 'log_tail_failed', 'detail': str(e) }), 500
 
 def compute_scores():
     """Return sorted list of scoreboard entries for all users."""
