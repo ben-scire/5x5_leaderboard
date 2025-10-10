@@ -58,6 +58,22 @@ TOTAL_POSSIBLE = len(RESULTS)
 
 app = Flask(__name__, static_folder='.', static_url_path='')
 
+# --- Cache control: prevent stale HTML on mobile Safari / iOS ---
+# Strategy:
+# 1. All HTML responses get no-store headers so updates are always fetched.
+# 2. Static assets (css/js) keep cacheable names but we append a ?v=VERSION query in HTML.
+#    When you change VERSION constant above, bump ASSET_TAG below or directly edit HTML query strings.
+
+@app.after_request
+def _add_cache_headers(resp):
+    ct = (resp.mimetype or '').lower()
+    if 'text/html' in ct:
+        # Strong no-cache for HTML documents
+        resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        resp.headers['Pragma'] = 'no-cache'
+        resp.headers['Expires'] = '0'
+    return resp
+
 # --- Simple persistent storage for Friday picks (new feature) ---
 FRIDAY_FILE = pathlib.Path('data/picks/friday_picks.json')
 FRIDAY_CSV_LOG = pathlib.Path('data/picks/friday_picks_log.csv')
