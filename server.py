@@ -593,7 +593,19 @@ def _force_reload_schedule():
 ############################
 
 def load_unified_picks():
+    # Fallback: if data/picks.json missing but a legacy root-level picks.json exists (from earlier deploys),
+    # copy it into place one time so scoring can proceed without manual intervention on Render.
     if not UNIFIED_PICKS_FILE.exists():
+        legacy_root = APP_ROOT / 'picks.json'
+        if legacy_root.exists():
+            try:
+                with legacy_root.open('r', encoding='utf-8') as f:
+                    data = json.load(f) or {}
+                # Write into data/picks.json for future loads
+                save_unified_picks(data)
+                return data
+            except Exception as e:
+                print('[PICKS][WARN] Failed migrating root picks.json -> data/picks.json:', e)
         return {}
     try:
         with UNIFIED_PICKS_FILE.open('r', encoding='utf-8') as f:
