@@ -631,6 +631,58 @@ def load_unified_picks():
                     print('[PICKS][INFO] Merged missing day(s) from legacy root picks.json into data/picks.json')
         except Exception as e:
             print('[PICKS][WARN] Failed merging legacy root picks.json:', e)
+        # Aggressive normalization pass: canonical day key, drop empty entries, uppercase picks
+        try:
+            norm_changed = False
+            # Canonicalize Thu key variants
+            for alt in list(data.keys()):
+                canon = _canon_day(alt)
+                if canon and canon != alt:
+                    if canon not in data:
+                        data[canon] = data[alt]
+                    else:
+                        # merge entries (keep latest ts)
+                        for email, rec in (data[alt] or {}).items():
+                            existing = data[canon].get(email)
+                            if not existing or existing.get('ts',0) < (rec or {}).get('ts',0):
+                                data[canon][email] = rec
+                    del data[alt]
+                    norm_changed = True
+            # Normalize each day
+            for day, dmap in list(data.items()):
+                if not isinstance(dmap, dict):
+                    continue
+                to_delete = []
+                for email, rec in dmap.items():
+                    if not isinstance(rec, dict):
+                        to_delete.append(email); continue
+                    picks_arr = rec.get('picks')
+                    if not isinstance(picks_arr, list):
+                        to_delete.append(email); continue
+                    # Uppercase & trim
+                    up = [ (str(v).strip().upper() if v is not None else '') for v in picks_arr ]
+                    # For Thu enforce length 3 (truncate or pad empties)
+                    if day == 'Thu':
+                        if len(up) > 3:
+                            up = up[:3]
+                        elif len(up) < 3:
+                            up = up + ['' for _ in range(3-len(up))]
+                    # Remove if all empty
+                    if not any(s for s in up):
+                        to_delete.append(email); continue
+                    if up != picks_arr:
+                        rec['picks'] = up
+                        norm_changed = True
+                for email in to_delete:
+                    del dmap[email]; norm_changed = True
+            if norm_changed:
+                tmp = UNIFIED_PICKS_FILE.with_suffix('.tmp')
+                with tmp.open('w', encoding='utf-8') as wf:
+                    json.dump(data, wf, indent=2)
+                tmp.replace(UNIFIED_PICKS_FILE)
+                print('[PICKS][INFO] Normalized unified picks store (canonical day keys, cleaned entries)')
+        except Exception as e:
+            print('[PICKS][WARN] Normalization pass failed:', e)
         return data
     except Exception:
         return {}
