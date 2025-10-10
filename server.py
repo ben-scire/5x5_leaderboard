@@ -50,6 +50,23 @@ PHRASE_MAP = {
     'conor.murphy30@gmail.com':'conor'
 }
 
+# Hard-coded authoritative Thursday picks overlay (extracted for reuse in debug endpoints)
+HARD_THURSDAY_PICKS = {
+    "kylejkz11@gmail.com": {"picks":["NYG","OVER","YES"],"ts":1760052212022},
+    "max1solov@gmail.com": {"picks":["NYG","OVER","YES"],"ts":1760061137466},
+    "samuel.lehman3337@gmail.com": {"picks":["PHI","OVER","YES"],"ts":1760063056358},
+    "shawnscottcarl@gmail.com": {"picks":["PHI","OVER","YES"],"ts":1760061138110},
+    "finsmaniac1551@gmail.com": {"picks":["PHI","OVER","NO"],"ts":1760061136402},
+    "jakelehman100@gmail.com": {"picks":["NYG","OVER","YES"],"ts":1760061137043},
+    "hankrudden@yahoo.com": {"picks":["NYG","UNDER","NO"],"ts":1760061136831},
+    "scire.ben@gmail.com": {"picks":["NYG","OVER","YES"],"ts":1760061137890},
+    "williamjabbott22@gmail.com": {"picks":["PHI","OVER","YES"],"ts":1760053753818},
+    "timjbohlman@gmail.com": {"picks":["NYG","OVER","YES"],"ts":1760061138964},
+    "goodnoughdylan@gmail.com": {"picks":["NYG","UNDER","YES"],"ts":1760061136617},
+    "mzanin98@gmail.com": {"picks":["NYG","OVER","YES"],"ts":1760062473351},
+    "jlindsey3428@gmail.com": {"picks":["NYG","OVER","YES"],"ts":1760062473351}
+}
+
 # Administrators (can view all submissions)
 ADMINS = {'scire.ben@gmail.com', 'jakelehman100@gmail.com'}
 
@@ -676,21 +693,7 @@ def load_unified_picks():
                 for email in to_delete:
                     del dmap[email]; norm_changed = True
             # Hard-coded Thursday overlay (authoritative emergency injection)
-            HARD_THU = {
-                "kylejkz11@gmail.com": {"picks":["NYG","OVER","YES"],"ts":1760052212022},
-                "max1solov@gmail.com": {"picks":["NYG","OVER","YES"],"ts":1760061137466},
-                "samuel.lehman3337@gmail.com": {"picks":["PHI","OVER","YES"],"ts":1760063056358},
-                "shawnscottcarl@gmail.com": {"picks":["PHI","OVER","YES"],"ts":1760061138110},
-                "finsmaniac1551@gmail.com": {"picks":["PHI","OVER","NO"],"ts":1760061136402},
-                "jakelehman100@gmail.com": {"picks":["NYG","OVER","YES"],"ts":1760061137043},
-                "hankrudden@yahoo.com": {"picks":["NYG","UNDER","NO"],"ts":1760061136831},
-                "scire.ben@gmail.com": {"picks":["NYG","OVER","YES"],"ts":1760061137890},
-                "williamjabbott22@gmail.com": {"picks":["PHI","OVER","YES"],"ts":1760053753818},
-                "timjbohlman@gmail.com": {"picks":["NYG","OVER","YES"],"ts":1760061138964},
-                "goodnoughdylan@gmail.com": {"picks":["NYG","UNDER","YES"],"ts":1760061136617},
-                "mzanin98@gmail.com": {"picks":["NYG","OVER","YES"],"ts":1760062473351},
-                "jlindsey3428@gmail.com": {"picks":["NYG","OVER","YES"],"ts":1760062473351}
-            }
+            HARD_THU = HARD_THURSDAY_PICKS
             thu_map = data.setdefault('Thu', {})
             injected = False
             for email, rec in HARD_THU.items():
@@ -1267,6 +1270,33 @@ def api_admin_all_picks():
     for day, dmap in (all_p or {}).items():
         safe[day] = { email: { 'picks': rec.get('picks') or [], 'ts': rec.get('ts') } for email, rec in (dmap or {}).items() }
     return jsonify({ 'ok': True, 'admin': admin_email, 'scheduleVersion': ver, 'days': safe })
+
+@app.route('/api/admin/debug_unified')
+def api_admin_debug_unified():
+    if not _require_admin():
+        return jsonify({ 'ok': False, 'error': 'forbidden' }), 403
+    data = load_unified_picks()
+    thu = (data.get('Thu') or {})
+    return jsonify({ 'ok': True, 'thuCount': len(thu), 'thuEmails': sorted(list(thu.keys())), 'sample': list(thu.items())[:5] })
+
+@app.route('/api/admin/force_overlay', methods=['POST'])
+def api_admin_force_overlay():
+    if not _require_admin():
+        return jsonify({ 'ok': False, 'error': 'forbidden' }), 403
+    # Force reload picks, then explicitly rewrite Thursday map with HARD_THURSDAY_PICKS and persist
+    data = load_unified_picks()
+    data.setdefault('Thu', {})
+    for k,v in HARD_THURSDAY_PICKS.items():
+        data['Thu'][k] = v
+    # Persist
+    try:
+        tmp = UNIFIED_PICKS_FILE.with_suffix('.tmp')
+        with tmp.open('w', encoding='utf-8') as f:
+            json.dump(data, f, indent=2)
+        tmp.replace(UNIFIED_PICKS_FILE)
+    except Exception as e:
+        return jsonify({ 'ok': False, 'error': 'persist_failed', 'detail': str(e) }), 500
+    return jsonify({ 'ok': True, 'forced': len(HARD_THURSDAY_PICKS), 'emails': sorted(list(HARD_THURSDAY_PICKS.keys())) })
 
 
 @app.route('/healthz')
