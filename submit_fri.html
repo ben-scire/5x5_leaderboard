@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Submit Friday Picks</title>
+  <link rel="stylesheet" href="leaderboard.css">
+  <style>
+    body{font-family:Inter,Arial,sans-serif;background:#0f1419;color:#e5e5e5;padding:24px;}
+    h1{margin-top:0;font-size:22px;}
+    .card{background:#1b232c;border:1px solid #24303c;padding:20px;max-width:520px;border-radius:10px;box-shadow:0 4px 12px -4px #000;} 
+    label{display:block;font-size:13px;margin-bottom:4px;font-weight:600;color:#9cc4ff;} 
+    input[type=email],input[type=text]{width:100%;padding:8px 10px;border:1px solid #314355;background:#0f1419;color:#e5e5e5;border-radius:6px;font-size:14px;} 
+    input[type=text]{text-transform:uppercase;} 
+    .row{margin-bottom:14px;} 
+    button{background:#1976d2;color:#fff;font-weight:600;border:none;padding:10px 18px;border-radius:6px;cursor:pointer;} 
+    button:disabled{background:#274865;opacity:.6;cursor:not-allowed;} 
+    #status{font-size:12px;margin-left:12px;color:#90caf9;} 
+    .note{font-size:12px;color:#888;margin-top:6px;} 
+    .success{color:#66ffa6;} .error{color:#ff6b6b;} 
+  </style>
+</head>
+<body>
+  <h1>Friday Picks Submission</h1>
+  <p style="font-size:13px;max-width:560px;">Enter the email you use on the leaderboard. Picks are stored on the server immediately. You can resubmit to overwrite until lock (manual for now). Teams: choose one team for each matchup (USF or UNT; RUT or WASH). Case-insensitive.</p>
+  <div class="card">
+    <div class="row"><label>Email <input id="email" type="email" required placeholder="you@example.com" /></label></div>
+    <div class="row" id="matchups"></div>
+    <div class="row" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+      <button id="loadBtn" type="button">Load Existing</button>
+      <button id="saveBtn" type="button">Save Picks</button>
+      <span id="status"></span>
+    </div>
+    <div class="note">Lock logic & Friday scoring display not yet wired to main leaderboard (server just stores data).</div>
+  </div>
+  <p style="margin-top:28px;"><a href="leaderboard.html" style="color:#64b5f6;">Back to Leaderboard</a></p>
+  <script>
+    async function fetchLabels(){
+      const r = await fetch('/api/picks/friday/labels');
+      const j = await r.json();
+      return j.labels || [];
+    }
+    function renderInputs(labels){
+      const host = document.getElementById('matchups');
+      host.innerHTML = labels.map((l,i)=>`<div style='margin-bottom:10px;'><label>${l}<input data-idx='${i}' type='text' placeholder='Team pick'></label></div>`).join('');
+    }
+    async function loadExisting(){
+      const email = document.getElementById('email').value.trim().toLowerCase();
+      const status = document.getElementById('status');
+      if(!email){ status.textContent='Enter email'; status.className='error'; return; }
+      status.textContent='Loading...'; status.className='';
+      try {
+        const r = await fetch('/api/picks/friday/get?email='+encodeURIComponent(email));
+        const j = await r.json();
+        if(j && j.picks){
+          j.picks.forEach((v,i)=>{ const inp=document.querySelector(`input[data-idx='${i}']`); if(inp) inp.value=v; });
+          status.textContent='Loaded'; status.className='success';
+        } else { status.textContent='No existing picks'; status.className=''; }
+      } catch(e){ status.textContent='Load failed'; status.className='error'; }
+    }
+    async function savePicks(){
+      const email = document.getElementById('email').value.trim().toLowerCase();
+      const status = document.getElementById('status');
+      if(!email){ status.textContent='Enter email'; status.className='error'; return; }
+      const inputs = Array.from(document.querySelectorAll('#matchups input[data-idx]'));
+      const picks = inputs.map(inp=> (inp.value||'').trim().toUpperCase());
+      status.textContent='Saving...'; status.className='';
+      try {
+        const r = await fetch('/api/picks/friday/submit',{method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ email, picks })});
+        const j = await r.json();
+        if(!r.ok || !j.ok){ status.textContent=j.error||'Save failed'; status.className='error'; return; }
+        status.textContent='Saved'; status.className='success';
+      } catch(e){ status.textContent='Save failed'; status.className='error'; }
+    }
+    document.getElementById('loadBtn').addEventListener('click', loadExisting);
+    document.getElementById('saveBtn').addEventListener('click', savePicks);
+    (async ()=>{ const labels = await fetchLabels(); renderInputs(labels); })();
+  </script>
+</body>
+</html>

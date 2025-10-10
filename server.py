@@ -58,6 +58,68 @@ TOTAL_POSSIBLE = len(RESULTS)
 
 app = Flask(__name__, static_folder='.', static_url_path='')
 
+# --- Simple persistent storage for Friday picks (new feature) ---
+FRIDAY_FILE = pathlib.Path('data/picks/friday_picks.json')
+FRIDAY_LABELS = [
+    'NCAAF: USF +1.5 @ UNT (pick team)',
+    'NCAAF: Rutgers +10.5 @ WASH (pick team)'
+]
+
+def _load_friday():
+    if FRIDAY_FILE.exists():
+        try:
+            with FRIDAY_FILE.open('r', encoding='utf-8') as f:
+                data = json.load(f)
+            if isinstance(data, dict):
+                # Normalize to list of same length as labels
+                out = {}
+                for email, picks in data.items():
+                    if isinstance(picks, list):
+                        adj = picks[:len(FRIDAY_LABELS)]
+                        while len(adj) < len(FRIDAY_LABELS):
+                            adj.append('')
+                        out[email] = [p.strip().upper() for p in adj]
+                return out
+        except Exception:
+            return {}
+    return {}
+
+def _save_friday(data: dict):
+    try:
+        FRIDAY_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with FRIDAY_FILE.open('w', encoding='utf-8') as f:
+            json.dump(data, f, indent=2)
+        return True
+    except Exception:
+        return False
+
+FRIDAY_PICKS = _load_friday()  # email -> list[str]
+
+@app.route('/api/picks/friday/labels')
+def friday_labels():
+    return jsonify({ 'ok': True, 'labels': FRIDAY_LABELS })
+
+@app.route('/api/picks/friday/get')
+def friday_get():
+    email = (request.args.get('email') or '').strip().lower()
+    picks = FRIDAY_PICKS.get(email)
+    return jsonify({ 'ok': True, 'email': email, 'picks': picks })
+
+@app.route('/api/picks/friday/submit', methods=['POST'])
+def friday_submit():
+    payload = request.get_json(force=True, silent=True) or {}
+    email = (payload.get('email') or '').strip().lower()
+    picks = payload.get('picks') or []
+    if not email:
+        return jsonify({ 'ok': False, 'error': 'email_required' }), 400
+    if not isinstance(picks, list) or len(picks) != len(FRIDAY_LABELS):
+        return jsonify({ 'ok': False, 'error': 'invalid_picks_length' }), 400
+    norm = [str(p or '').strip().upper() for p in picks]
+    FRIDAY_PICKS[email] = norm
+    if not _save_friday(FRIDAY_PICKS):
+        return jsonify({ 'ok': False, 'error': 'persist_failed' }), 500
+    return jsonify({ 'ok': True, 'saved': True })
+
 def compute_scores():
     """Return sorted list of scoreboard entries for all users."""
     entries = []
