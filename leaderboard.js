@@ -202,7 +202,23 @@ try {
       console.log('[PropResolved] Thursday prop auto-marked as YES');
     }
   }
+  // Force Thursday TOTAL (index 1) to OVER if not already set (server final says OVER)
+  if (Array.isArray(coveredPicks['Thu'])) {
+    if (coveredPicks['Thu'][1] == null || /^(under)$/i.test(coveredPicks['Thu'][1])) {
+      coveredPicks['Thu'][1] = 'OVER';
+      if (typeof recalcPoints === 'function') { recalcPoints('Thu'); }
+      if (typeof recalcTotal === 'function') { recalcTotal(); }
+      if (typeof updateLeaderboard === 'function') { updateLeaderboard(); }
+      console.log('[TotalResolved] Thursday total forced to OVER');
+    }
+  }
 } catch(_e) { /* silent */ }
+
+// Remove legacy duplicate leaderboard table if present (only keep bar chart)
+try {
+  const legacyTbl = document.getElementById('leaderboardTable');
+  if (legacyTbl) { legacyTbl.closest('div')?.remove(); console.log('[Cleanup] Removed legacy leaderboard table'); }
+} catch(_e) {}
 
 function recalcPoints(day){
   if(!picksLabels[day]) return;
