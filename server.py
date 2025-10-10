@@ -1026,8 +1026,11 @@ def _compute_current_scores():
                     dstat['score'] += 1
                     entry['score'] += 1
     total_picks = sum(len((defn or {}).get('picks') or []) for defn in days.values())
+    # Include every known user (ALL_USERS) even if they have 0 submissions so far
     leaderboard = []
-    for email, rec in per_user.items():
+    all_emails = set(ALL_USERS) | set(per_user.keys())
+    for email in sorted(all_emails):
+        rec = per_user.get(email, { 'score':0, 'answered':0, 'perDay':{} })
         leaderboard.append({
             'email': email,
             'score': rec['score'],
