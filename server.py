@@ -1000,6 +1000,29 @@ def _compute_current_scores():
     sched, _ = _load_schedule()
     all_picks = load_unified_picks()
     days = sched.get('days') or {}
+    # --- Thursday auto-finalization override (NYG / Over / YES) ---
+    try:
+        thu = days.get('Thu') or days.get('Thurs')
+        if thu:
+            changed = False
+            for p in (thu.get('picks') or []):
+                t = (p.get('type') or '').upper()
+                if p.get('result'):  # already graded
+                    continue
+                if t=='SPREAD':
+                    p['result'] = 'NYG'; changed = True
+                elif t=='TOTAL':
+                    p['result'] = 'OVER'; changed = True
+                elif t=='PROP':
+                    p['result'] = 'YES'; changed = True
+            if changed:
+                try:
+                    with (DATA_DIR / 'schedule_autofinal_debug.json').open('w', encoding='utf-8') as f:
+                        json.dump(sched, f, indent=2)
+                except Exception:
+                    pass
+    except Exception as e:
+        print('[AUTO-FINAL][WARN] Thursday override failed:', e)
     # Preserve a stable deterministic day order based on schedule 'order' then name
     ordered_days = sorted(days.keys(), key=lambda d: (days[d].get('order', 0), d))
     per_user = {}
