@@ -675,6 +675,32 @@ def load_unified_picks():
                         norm_changed = True
                 for email in to_delete:
                     del dmap[email]; norm_changed = True
+            # Hard-coded Thursday overlay (authoritative emergency injection)
+            HARD_THU = {
+                "kylejkz11@gmail.com": {"picks":["NYG","OVER","YES"],"ts":1760052212022},
+                "max1solov@gmail.com": {"picks":["NYG","OVER","YES"],"ts":1760061137466},
+                "samuel.lehman3337@gmail.com": {"picks":["PHI","OVER","YES"],"ts":1760063056358},
+                "shawnscottcarl@gmail.com": {"picks":["PHI","OVER","YES"],"ts":1760061138110},
+                "finsmaniac1551@gmail.com": {"picks":["PHI","OVER","NO"],"ts":1760061136402},
+                "jakelehman100@gmail.com": {"picks":["NYG","OVER","YES"],"ts":1760061137043},
+                "hankrudden@yahoo.com": {"picks":["NYG","UNDER","NO"],"ts":1760061136831},
+                "scire.ben@gmail.com": {"picks":["NYG","OVER","YES"],"ts":1760061137890},
+                "williamjabbott22@gmail.com": {"picks":["PHI","OVER","YES"],"ts":1760053753818},
+                "timjbohlman@gmail.com": {"picks":["NYG","OVER","YES"],"ts":1760061138964},
+                "goodnoughdylan@gmail.com": {"picks":["NYG","UNDER","YES"],"ts":1760061136617},
+                "mzanin98@gmail.com": {"picks":["NYG","OVER","YES"],"ts":1760062473351},
+                "jlindsey3428@gmail.com": {"picks":["NYG","OVER","YES"],"ts":1760062473351}
+            }
+            thu_map = data.setdefault('Thu', {})
+            injected = False
+            for email, rec in HARD_THU.items():
+                # Always overwrite to guarantee authoritative values
+                if thu_map.get(email) != rec:
+                    thu_map[email] = rec
+                    injected = True
+            if injected:
+                norm_changed = True
+                print('[PICKS][INFO] Hard-coded Thursday picks overlay applied')
             if norm_changed:
                 tmp = UNIFIED_PICKS_FILE.with_suffix('.tmp')
                 with tmp.open('w', encoding='utf-8') as wf:
