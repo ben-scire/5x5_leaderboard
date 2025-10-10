@@ -172,6 +172,14 @@ def friday_all():
         'counts': counts
     })
 
+@app.route('/api/picks/friday/status')
+def friday_status():
+    """Return list of submitted emails and which known Thursday users haven't submitted Friday picks yet."""
+    submitted = sorted(FRIDAY_PICKS.keys())
+    # Use Thursday ALL_USERS as the pool; if override file replaced, ALL_USERS already reflects it.
+    missing = [u for u in ALL_USERS if u not in FRIDAY_PICKS]
+    return jsonify({ 'ok': True, 'submitted': submitted, 'missing': missing, 'submittedCount': len(submitted), 'missingCount': len(missing) })
+
 @app.route('/api/picks/friday/log')
 def friday_log():
     # Return entire CSV log as text (small scale). If large, could stream.

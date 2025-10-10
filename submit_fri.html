@@ -38,6 +38,12 @@
       <span id="status"></span>
     </div>
     <div class="note">Lock logic & Friday scoring display not yet wired to main leaderboard (server just stores data).</div>
+    <div class="row" style="margin-top:18px;">
+      <div style="font-size:13px;font-weight:600;margin-bottom:6px;color:#9cc4ff;display:flex;align-items:center;gap:10px;">
+        Friday Submission Status <button id="refreshStatus" type="button" style="background:#233345;border:1px solid #35526b;color:#9cc4ff;font-size:12px;padding:6px 10px;border-radius:6px;cursor:pointer;">Refresh</button>
+      </div>
+      <div id="fridayStatus" style="font-size:12px;line-height:1.5;background:#152027;border:1px solid #22323e;padding:10px 12px;border-radius:8px;max-height:200px;overflow:auto;"></div>
+    </div>
   </div>
   <p style="margin-top:28px;"><a href="leaderboard.html" style="color:#64b5f6;">Back to Leaderboard</a></p>
   <script>
@@ -101,6 +107,24 @@
     }
     document.getElementById('loadBtn').addEventListener('click', loadExisting);
     document.getElementById('saveBtn').addEventListener('click', savePicks);
+    async function loadFridayStatus(){
+      try {
+        const r = await fetch('/api/picks/friday/status?ts='+Date.now(), { cache:'no-store' });
+        if(!r.ok) throw new Error();
+        const j = await r.json();
+        if(!j.ok) throw new Error('bad json');
+        const sub = j.submitted || []; const miss = j.missing || [];
+        const totalPool = sub.length + miss.length;
+        const pct = totalPool? Math.round((sub.length/totalPool)*100):0;
+        const frag = `<div style='margin-bottom:6px;'>Submitted: <span style='color:#66ffa6;font-weight:600;'>${sub.length}</span> / ${totalPool} (${pct}%)</div>`+
+          (sub.length? `<div style='margin-bottom:6px;'><span style='color:#66ffa6;font-weight:600;'>Submitted Emails</span><br>${sub.map(e=> `<span style='display:inline-block;margin:2px 6px 2px 0;padding:2px 6px;border-radius:4px;background:#1e2d24;color:#66ffa6;'>${e.split('@')[0]}</span>`).join('')}</div>`: '<div style="margin-bottom:6px;color:#999;">No submissions yet.</div>')+
+          (miss.length? `<div style='margin-top:4px;'><span style='color:#ffb74d;font-weight:600;'>Missing</span><br>${miss.map(e=> `<span style='display:inline-block;margin:2px 6px 2px 0;padding:2px 6px;border-radius:4px;background:#332416;color:#ffcc80;'>${e.split('@')[0]}</span>`).join('')}</div>` : '<div style="margin-top:4px;color:#999;">No missing users.</div>');
+        document.getElementById('fridayStatus').innerHTML = frag;
+      } catch(e){ document.getElementById('fridayStatus').innerHTML = '<span style="color:#ff6b6b;">Status load failed</span>'; }
+    }
+    document.getElementById('refreshStatus').addEventListener('click', loadFridayStatus);
+    // Initial status load (stagger slightly after labels render)
+    setTimeout(loadFridayStatus, 400);
     (async ()=>{ const labels = await fetchLabels(); renderInputs(labels); })();
   </script>
 </body>
