@@ -30,9 +30,13 @@
       days[mk] = rawDays[k];
     });
     // Ensure global containers exist (from config.js)
-    window.picksLabels = window.picksLabels || { Thurs:[], Fri:[], Sat:[], Sun:[], Mon:[] };
-    window.userPicks = window.userPicks || { Thurs:{}, Fri:{}, Sat:{}, Sun:{}, Mon:{} };
-    window.coveredPicks = window.coveredPicks || { Thurs:[], Fri:[], Sat:[], Sun:[], Mon:[] };
+  // NOTE: Standardize on 'Thu' (previous code sometimes used 'Thurs'). Provide backward compat mapping.
+  window.picksLabels = window.picksLabels || { Thu:[], Fri:[], Sat:[], Sun:[], Mon:[] };
+  window.userPicks = window.userPicks || { Thu:{}, Fri:{}, Sat:{}, Sun:{}, Mon:{} };
+  window.coveredPicks = window.coveredPicks || { Thu:[], Fri:[], Sat:[], Sun:[], Mon:[] };
+  if(window.picksLabels.Thurs && !window.picksLabels.Thu){ window.picksLabels.Thu = window.picksLabels.Thurs; }
+  if(window.userPicks.Thurs && !window.userPicks.Thu){ window.userPicks.Thu = window.userPicks.Thurs; }
+  if(window.coveredPicks.Thurs && !window.coveredPicks.Thu){ window.coveredPicks.Thu = window.coveredPicks.Thurs; }
 
     function applyDay(dayKey){
       const def = days[dayKey]; if(!def) return;

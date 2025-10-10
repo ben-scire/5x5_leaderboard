@@ -26,7 +26,7 @@
 // Friday CFB finals: Tulsa @ Oklahoma State 19-12 (Tulsa wins & covers), Iowa @ Rutgers 38-28 (Iowa wins & covers)
 // Lines/totals for Friday not provided -> leave null so we render blanks.
 const finalResults = {
-  'Thurs': [
+  'Thu': [
     { awayAbbr:'MIA', homeAbbr:'BUF', awayScore:21, homeScore:31, lineHome:-11.5, total:50.5 }
   ],
   'Fri': [
@@ -275,7 +275,7 @@ let LIVE_LEADERBOARD_ENABLED = false;
 // computeProjectedDay removed (no projections shown).
 
 function updateLeaderboard(){
-  try { recalcPoints('Thu'); recalcPoints('Fri'); recalcPoints('Sat'); recalcPoints('Sun'); recalcTotal(); } catch(e) { /* silent */ }
+  try { recalcPoints('Thu'); recalcPoints('Fri'); recalcPoints('Sat'); recalcPoints('Sun'); recalcPoints('Mon'); recalcTotal(); } catch(e) { /* silent */ }
 
   function pointsForDay(day, user){
     const picks = (userPicks[day] && userPicks[day][user.username]) || [];
@@ -580,9 +580,9 @@ function updateScoreboard(){
     day==='Mon'? { games:mondayGames, states:mondayStates, times:mondayStartTimes } : { games:[], states:[], times:[] };
   const { games, states, times } = meta(scoreboardDay);
 
-  // If past completed day (Thurs/Fri) and we have static final results, render those (preferred over labels fallback)
+  // If past completed day (Thu/Fri) and we have static final results, render those (preferred over labels fallback)
   if((scoreboardDay==='Thu' || scoreboardDay==='Fri') && (!games || !games.length) && finalResults[scoreboardDay]){
-    // For Thursday, if we *do* have a live nflGame state, skip static finals.
+  // For Thursday, if we *do* have a live nflGame state, skip static finals.
     if(!(scoreboardDay==='Thu' && nflGame && nflState && typeof nflState.status==='string')){
     console.log('[Scoreboard] Using static finals for', scoreboardDay, 'games length=', games?games.length:0);
   // Removed Total column per request
@@ -791,7 +791,9 @@ async function resolveSaturdayEventIds(){
 
 /* ============= Chart Height & Reveal ============= */
 function adjustChartHeight(){ const canvas = document.getElementById('leaderboardChart'); const isMobile = innerWidth < 680; const per = isMobile ? 34 : 30; const base = isMobile ? 80 : 100; canvas.style.height = (users.length * per + base) + 'px'; if(chart) chart.resize(); }
-let leaderboardShown = false; function maybeRevealLeaderboard(){ if(leaderboardShown) return; if(['Thurs','Fri','Sat','Sun','Mon'].some(d=> coveredPicks[d] && coveredPicks[d].some(c=>c!==null))){ document.getElementById('chartWrapper').style.display='block'; leaderboardShown = true; document.body.classList.remove('focus-phase'); document.body.classList.add('post-phase'); adjustChartHeight(); updateLeaderboard(); setTimeout(()=>{ document.getElementById('leaderboardChart').classList.add('winner-glow'); }, 150); } }
+let leaderboardShown = false; function maybeRevealLeaderboard(){ if(leaderboardShown) return; const DAY_KEYS=['Thu','Fri','Sat','Sun','Mon']; // Allow legacy 'Thurs' fallback
+  if(window.coveredPicks && window.coveredPicks.Thurs && !window.coveredPicks.Thu){ window.coveredPicks.Thu = window.coveredPicks.Thurs; }
+  if(DAY_KEYS.some(d=> coveredPicks[d] && coveredPicks[d].some(c=>c!==null))){ document.getElementById('chartWrapper').style.display='block'; leaderboardShown = true; document.body.classList.remove('focus-phase'); document.body.classList.add('post-phase'); adjustChartHeight(); updateLeaderboard(); setTimeout(()=>{ document.getElementById('leaderboardChart').classList.add('winner-glow'); }, 150); } }
 window.addEventListener('resize', ()=>{ if(leaderboardShown){ adjustChartHeight(); updateLeaderboard(); } });
 
 /* ============= Picks Toggle ============= */
@@ -800,7 +802,7 @@ let picksDay='Sat';
 (function initDayToggle(){
   const host=document.getElementById('dayToggleBar'); if(!host) return;
   // Full range of days reinstated.
-  const order=['Thurs','Fri','Sat','Sun','Mon'];
+  const order=['Thu','Fri','Sat','Sun','Mon'];
   function btn(day){ return `<button data-day="${day}" class="picks-btn ${day===picksDay?'active':''}">${day}</button>`; }
   function render(){ host.innerHTML = order.map(btn).join(''); }
   // Expose for later refresh after initialDay is chosen on load
@@ -837,8 +839,12 @@ window.addEventListener('load', async () => {
   if(dow===0) initialDay='Sun';
   else if(dow===1) initialDay='Mon';
   else if(dow===5) initialDay='Fri';
-  else if(dow===4) initialDay='Thurs';
-  recalcPoints('Thurs'); recalcPoints('Fri'); recalcPoints('Sat'); recalcPoints('Sun'); recalcPoints('Mon'); recalcTotal(); updateLeaderboard();
+  else if(dow===4) initialDay='Thu';
+  // Normalize any legacy 'Thurs' keys to 'Thu' before initial calculations
+  if(window.picksLabels && window.picksLabels.Thurs && !window.picksLabels.Thu){ window.picksLabels.Thu = window.picksLabels.Thurs; }
+  if(window.userPicks && window.userPicks.Thurs && !window.userPicks.Thu){ window.userPicks.Thu = window.userPicks.Thurs; }
+  if(window.coveredPicks && window.coveredPicks.Thurs && !window.coveredPicks.Thu){ window.coveredPicks.Thu = window.coveredPicks.Thurs; }
+  recalcPoints('Thu'); recalcPoints('Fri'); recalcPoints('Sat'); recalcPoints('Sun'); recalcPoints('Mon'); recalcTotal(); updateLeaderboard();
   // Enable live leaderboard by default
   LIVE_LEADERBOARD_ENABLED = true;
   const liveCbInit = document.getElementById('liveLbCheckbox');
