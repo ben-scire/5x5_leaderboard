@@ -124,6 +124,23 @@
       return `<tr><td>${i+1}</td><td>${nick}</td>${perDayCells}<td>${e.score}</td><td>${e.answered}</td><td>${leaderboard.totalPossible}</td></tr>`;
     }).join('');
     tbl.innerHTML = header + body;
+
+    // --- If legacy chart users array is still empty, seed it directly from server leaderboard ---
+    if(Array.isArray(window.users) && window.users.length===0){
+      const dayOrder = leaderboard.dayOrder || [];
+      const perDayKeys = { Thu:'thurs', Fri:'fri', Sat:'sat', Sun:'sun', Mon:'mon' };
+      entries.forEach(e=>{
+        const uObj = { username:e.email, thurs:0,fri:0,sat:0,sun:0,mon:0,total:0 };
+        dayOrder.forEach(d=>{
+          const dstat = (e.perDay && e.perDay[d]) || { score:0 };
+          const key = perDayKeys[d];
+          if(key){ uObj[key] = dstat.score; }
+        });
+        uObj.total = uObj.thurs + uObj.fri + uObj.sat + uObj.sun + uObj.mon;
+        window.users.push(uObj);
+      });
+      try { if(typeof window.updateLeaderboard==='function') window.updateLeaderboard(); } catch(_){}
+    }
   }
 
   async function refresh(){
