@@ -186,6 +186,24 @@ function alignCoveredPicks(){
 // Run alignment once at load (after initial coveredPicks defined) before any scoring functions.
 alignCoveredPicks();
 
+// --- Immediate static prop resolution (manual directive) ---
+// User request: The Thursday prop (index 2) has already been decided as YES and
+// should immediately award points. We set the covered value once (idempotent)
+// unless it was already populated (e.g., by live logic or a manual override).
+try {
+  if (picksLabels && Array.isArray(picksLabels['Thu']) && /Anytime TD/i.test(picksLabels['Thu'][2]||'')) {
+    if (!Array.isArray(coveredPicks['Thu'])) coveredPicks['Thu'] = [];
+    if (coveredPicks['Thu'][2] == null) { // only set if not already determined
+      coveredPicks['Thu'][2] = 'YES';
+      if (typeof recalcPoints === 'function') { recalcPoints('Thu'); }
+      if (typeof recalcTotal === 'function') { recalcTotal(); }
+      if (typeof updateLeaderboard === 'function') { updateLeaderboard(); }
+      if (typeof renderPicksTable === 'function') { try { renderPicksTable('Thu'); } catch(_){} }
+      console.log('[PropResolved] Thursday prop auto-marked as YES');
+    }
+  }
+} catch(_e) { /* silent */ }
+
 function recalcPoints(day){
   if(!picksLabels[day]) return;
   users.forEach(u=>{
@@ -555,7 +573,8 @@ function updateScoreboard(){
     else if(dow===6) scoreboardDay='Sat';
     else scoreboardDay='Sat'; // Tue/Wed default to upcoming Saturday slate
   }
-  const meta = (day)=> day==='Fri'? { games:fridayGames, states:fridayStates, times:fridayStartTimes } :
+  const meta = (day)=> day==='Thu'? { games:[nflGame].filter(Boolean), states:[nflState].filter(Boolean), times:[] } :
+    day==='Fri'? { games:fridayGames, states:fridayStates, times:fridayStartTimes } :
     day==='Sat'? { games:saturdayGames, states:saturdayStates, times:saturdayStartTimes } :
     day==='Sun'? { games:sundayGames, states:sundayStates, times:sundayStartTimes } :
     day==='Mon'? { games:mondayGames, states:mondayStates, times:mondayStartTimes } : { games:[], states:[], times:[] };
@@ -563,6 +582,8 @@ function updateScoreboard(){
 
   // If past completed day (Thurs/Fri) and we have static final results, render those (preferred over labels fallback)
   if((scoreboardDay==='Thu' || scoreboardDay==='Fri') && (!games || !games.length) && finalResults[scoreboardDay]){
+    // For Thursday, if we *do* have a live nflGame state, skip static finals.
+    if(!(scoreboardDay==='Thu' && nflGame && nflState && typeof nflState.status==='string')){
     console.log('[Scoreboard] Using static finals for', scoreboardDay, 'games length=', games?games.length:0);
   // Removed Total column per request
   const header = '<tr><th>Game</th><th>Final Score</th><th>Spread</th></tr>';
@@ -587,7 +608,8 @@ function updateScoreboard(){
     }).join('');
     tbl.innerHTML = header + rows;
     const titleEl = document.getElementById('scoresTitle'); if(titleEl) titleEl.textContent = 'Scores ('+scoreboardDay+')';
-    return;
+      return;
+    }
   }
   function spreadLabel(g){ const ln=g.lineHome; if(typeof ln!=='number') return ''; if(ln===0) return 'PK'; const fav = ln<0? g.homeAbbr : g.awayAbbr; return `${fav} -${Math.abs(ln)}`; }
   // Total column fully removed; helper eliminated
