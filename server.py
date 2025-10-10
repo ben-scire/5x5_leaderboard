@@ -8,6 +8,9 @@ except Exception:  # pragma: no cover
 from werkzeug.security import generate_password_hash, check_password_hash
 from pathlib import Path
 
+# Deployment version marker (manually updated; appears in /healthz). Update when releasing.
+VERSION = 'e35dcae'
+
 APP_ROOT = Path(__file__).parent
 DATA_DIR = APP_ROOT / 'data'
 DATA_DIR.mkdir(exist_ok=True)
@@ -1323,6 +1326,7 @@ def healthz():
         unified_counts = { day: len(v or {}) for day,v in unified.items() }
         resp = {
             'ok': True,
+            'version': VERSION,
             'time': now_ms,
             'usersTotal': len(ALL_USERS),
             'unifiedDays': unified_counts,
@@ -1341,6 +1345,26 @@ def healthz():
         return jsonify(resp), 200
     except Exception as e:
         return jsonify({ 'ok': False, 'error': 'health_failed', 'detail': str(e) }), 500
+
+
+@app.route('/api/debug/thu')
+def api_debug_thu():
+    """Public lightweight Thursday debug: returns count + score snapshot (first 10 users with answers) and version.
+    Safe because values already visible on leaderboard; avoids admin token friction."""
+    try:
+        data = load_unified_picks()
+        thu = data.get('Thu') or {}
+        lb = _compute_current_scores()
+        answered = [e for e in lb['entries'] if e.get('answered',0)>0]
+        return jsonify({
+            'ok': True,
+            'version': VERSION,
+            'thuPickCount': len(thu),
+            'thuEmails': sorted(list(thu.keys())),
+            'scoredSample': answered[:10]
+        })
+    except Exception as e:
+        return jsonify({ 'ok': False, 'error': 'debug_failed', 'detail': str(e) }), 500
 
 
 @app.route('/')
