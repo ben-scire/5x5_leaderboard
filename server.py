@@ -291,6 +291,39 @@ def friday_lock_status():
         st['emails'] = sorted(data.get('picks', {}).keys())
     return jsonify({ 'ok': True, **st })
 
+def _csv_escape(val: str):
+    if any(c in val for c in [',','"','\n','\r']):
+        return '"' + val.replace('"', '""') + '"'
+    return val
+
+@app.route('/api/picks/export')
+def picks_export():
+    """Export current (or locked) picks for a day as CSV. Supports day=Thu or day=Fri."""
+    day = (request.args.get('day') or '').strip().lower()
+    if day.startswith('thu'):
+        # Thursday: authoritative picks are HARD_PICKS (possibly file override)
+        header = ['email'] + [f'pick{i+1}' for i in range(len(RESULTS))]
+        lines = [','.join(header)]
+        for email in sorted(HARD_PICKS.keys()):
+            row = [email] + HARD_PICKS[email]
+            lines.append(','.join(_csv_escape(str(v)) for v in row))
+        csv_data = '\n'.join(lines) + '\n'
+        return app.response_class(csv_data, mimetype='text/csv')
+    if day.startswith('fri'):
+        # If locked, use locked snapshot; else live latest FRIDAY_PICKS
+        if _is_friday_locked():
+            data = _load_friday_locked().get('picks', {})
+        else:
+            data = FRIDAY_PICKS
+        header = ['email'] + [f'pick{i+1}' for i in range(len(FRIDAY_LABELS))]
+        lines = [','.join(header)]
+        for email in sorted(data.keys()):
+            row = [email] + data[email]
+            lines.append(','.join(_csv_escape(str(v)) for v in row))
+        csv_data = '\n'.join(lines) + '\n'
+        return app.response_class(csv_data, mimetype='text/csv')
+    return jsonify({ 'ok': False, 'error': 'unsupported_day' }), 400
+
 @app.route('/api/picks/friday/log')
 def friday_log():
     # Return entire CSV log as text (small scale). If large, could stream.
