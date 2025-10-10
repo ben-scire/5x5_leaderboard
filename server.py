@@ -120,6 +120,26 @@ def friday_submit():
         return jsonify({ 'ok': False, 'error': 'persist_failed' }), 500
     return jsonify({ 'ok': True, 'saved': True })
 
+@app.route('/api/picks/friday/all')
+def friday_all():
+    # Monitoring endpoint: list of all submitted Friday picks + counts per selection
+    counts = [ {}, {} ]  # one dict per matchup
+    for email, picks in FRIDAY_PICKS.items():
+        for i, val in enumerate(picks):
+            if i >= len(counts):
+                break
+            if not val:
+                continue
+            d = counts[i]
+            d[val] = d.get(val, 0) + 1
+    return jsonify({
+        'ok': True,
+        'labels': FRIDAY_LABELS,
+        'totalSubmissions': len(FRIDAY_PICKS),
+        'picks': FRIDAY_PICKS,
+        'counts': counts
+    })
+
 def compute_scores():
     """Return sorted list of scoreboard entries for all users."""
     entries = []
