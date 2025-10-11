@@ -466,7 +466,7 @@ window.revealSaturday = function(){
 // remaining games stay hidden until full reveal. We introduce a global counter
 // partialSatRevealCount controlling how many leading Saturday pick indices are public.
 // Default to 2 (first two games live) for this week.
-window.partialSatRevealCount = 2; // change to 0 to re-hide, or to 6 for full manual reveal
+window.partialSatRevealCount = 4; // expanded reveal: first four Saturday games now visible (Oregon & Texas games added)
 
 // Admin helper to adjust on the fly if needed.
 window.setPartialSaturdayReveal = function(count){
