@@ -39,7 +39,8 @@
     <div class="row" style="margin-top:18px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
       <button id="loadBtn" type="button">Load Existing</button>
       <button id="saveBtn" type="button">Save Picks</button>
-      <button id="lockBtn" type="button" style="background:#8e24aa;">Lock (Admin)</button>
+  <button id="lockBtn" type="button" style="background:#8e24aa;">Lock (Admin)</button>
+  <button id="unlockBtn" type="button" style="background:#c62828;">Unlock (Admin)</button>
       <span id="status"></span>
     </div>
     <div class="note">Locking is manual for now. Live scoring not yet wired (results placeholder).</div>
@@ -146,10 +147,15 @@ async function refreshLockStatus(){
     const saveBtn = document.getElementById('saveBtn'); if(locked){ saveBtn.disabled=true; saveBtn.textContent='Locked'; document.getElementById('lockBtn').disabled=true; const st=document.getElementById('status'); st.textContent='Locked at '+(j.lockedAt||''); st.className='success'; }
   } catch(_e){}
 }
-async function lockNow(){
+ async function lockNow(){
   if(!confirm('Lock Saturday picks now?')) return;
   const status = document.getElementById('status'); status.textContent='Locking...'; status.className='';
   try { const r = await fetch('/api/picks/saturday/lock',{method:'POST'}); const j = await r.json(); if(!r.ok||!j.ok){ status.textContent=j.error||'Lock failed'; status.className='error'; return; } status.textContent='Locked ('+(j.count||0)+' users)'; status.className='success'; refreshLockStatus(); loadStatus(); } catch(e){ status.textContent='Lock failed'; status.className='error'; }
+}
+async function unlockNow(){
+  if(!confirm('Unlock Saturday picks?')) return;
+  const status = document.getElementById('status'); status.textContent='Unlocking...'; status.className='';
+  try { const r = await fetch('/api/picks/saturday/unlock',{method:'POST'}); const j = await r.json(); if(!r.ok||!j.ok){ status.textContent=j.error||'Unlock failed'; status.className='error'; return; } status.textContent='Unlocked'; status.className='success'; document.getElementById('saveBtn').disabled=false; refreshLockStatus(); loadStatus(); } catch(e){ status.textContent='Unlock failed'; status.className='error'; }
 }
 async function loadStatus(){
   try { const r = await fetch('/api/picks/saturday/status?ts='+Date.now(), {cache:'no-store'}); if(!r.ok) throw 0; const j = await r.json(); if(!j.ok) throw 0; const sub=j.submitted||[], miss=j.missing||[]; const total=sub.length+miss.length; const pct= total? Math.round(sub.length/total*100):0; const frag = `<div style='margin-bottom:6px;'>Submitted: <span style='color:#66ffa6;font-weight:600;'>${sub.length}</span> / ${total} (${pct}%)</div>` + (sub.length? `<div style='margin-bottom:6px;'><span style='color:#66ffa6;font-weight:600;'>Submitted Emails</span><br>${sub.map(e=>`<span style='display:inline-block;margin:2px 6px 2px 0;padding:2px 6px;border-radius:4px;background:#1e2d24;color:#66ffa6;'>${e.split('@')[0]}</span>`).join('')}</div>`:'') + (miss.length? `<div style='margin-top:4px;'><span style='color:#ffb74d;font-weight:600;'>Missing</span><br>${miss.map(e=>`<span style='display:inline-block;margin:2px 6px 2px 0;padding:2px 6px;border-radius:4px;background:#332416;color:#ffcc80;'>${e.split('@')[0]}</span>`).join('')}</div>`:''); document.getElementById('satStatus').innerHTML=frag; } catch(e){ document.getElementById('satStatus').innerHTML='<span style="color:#ff6b6b;">Status load failed</span>'; }
@@ -158,6 +164,7 @@ async function loadStatus(){
  document.getElementById('loadBtn').addEventListener('click', loadExisting);
  document.getElementById('saveBtn').addEventListener('click', savePicks);
  document.getElementById('lockBtn').addEventListener('click', lockNow);
+ document.getElementById('unlockBtn').addEventListener('click', unlockNow);
  document.getElementById('refreshStatus').addEventListener('click', loadStatus);
  async function loadEmails(){
   try { const r= await fetch('/api/pins/emails?ts='+Date.now()); const j= await r.json(); if(j.ok){ const sel=document.getElementById('email'); j.emails.forEach(e=>{ const opt=document.createElement('option'); opt.value=e; opt.textContent=e; sel.appendChild(opt); }); } } catch(e){}

@@ -838,6 +838,31 @@ def saturday_lock():
         return jsonify({ 'ok': False, 'error': 'lock_write_failed' }), 500
     return jsonify({ 'ok': True, 'locked': True, 'count': len(snapshot) })
 
+@app.route('/api/picks/saturday/unlock', methods=['POST'])
+def saturday_unlock():
+    """Admin: remove Saturday lock files to allow further submissions. Requires ADMIN_TOKEN if set."""
+    token = request.args.get('token') or request.headers.get('X-Admin-Token')
+    admin_token = os.environ.get('ADMIN_TOKEN')
+    if admin_token and token != admin_token:
+        return jsonify({ 'ok': False, 'error': 'forbidden' }), 403
+    # If not locked just return
+    if not _is_saturday_locked():
+        return jsonify({ 'ok': True, 'alreadyUnlocked': True })
+    removed = []
+    try:
+        if SATURDAY_LOCK_FILE.exists():
+            SATURDAY_LOCK_FILE.unlink()
+            removed.append(str(SATURDAY_LOCK_FILE))
+    except Exception:
+        pass
+    try:
+        if SATURDAY_LOCK_STATUS.exists():
+            SATURDAY_LOCK_STATUS.unlink()
+            removed.append(str(SATURDAY_LOCK_STATUS))
+    except Exception:
+        pass
+    return jsonify({ 'ok': True, 'unlocked': True, 'removed': removed })
+
 @app.route('/api/picks/saturday/lock/status')
 def saturday_lock_status():
     st = _load_saturday_lock_status()
