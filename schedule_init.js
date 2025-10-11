@@ -181,5 +181,33 @@
         console.log('[ScheduleInit] Friday completeness repair executed for', missing.length, 'users');
       } catch(err){ console.warn('[ScheduleInit] Friday fallback repair failed', err); }
     }, 1200);
+
+    // Secondary backfill: ensure every leaderboard email has Friday picks if present server-side.
+    setTimeout(async () => {
+      try {
+        const lb = await fetch('/api/leaderboard',{cache:'no-store'}).then(r=> r.ok? r.json(): null).catch(()=>null);
+        if(!lb || !lb.entries) return;
+        const pub = await fetch('/api/picks/public?day=Fri',{cache:'no-store'}).then(r=> r.ok? r.json(): null).catch(()=>null);
+        const entries = pub && pub.entries ? pub.entries : {};
+        let repaired=0;
+        lb.entries.forEach(e=>{
+          const email = e.email;
+          if(!userPicks['Fri'][email] && entries[email]){
+            const rec = entries[email].picks || [];
+            const needed = picksLabels['Fri'] ? picksLabels['Fri'].length : rec.length;
+            let adj = rec.slice(0, needed);
+            while(adj.length < needed) adj.push('');
+            userPicks['Fri'][email] = adj;
+            repaired++;
+          }
+        });
+        if(repaired){
+          if(typeof recalcPoints==='function'){ recalcPoints('Fri'); recalcTotal && recalcTotal(); }
+          if(typeof updateLeaderboard==='function') updateLeaderboard();
+          if(typeof renderPicksTable==='function' && picksDay==='Fri') renderPicksTable('Fri');
+          console.log('[ScheduleInit] Friday secondary backfill added', repaired, 'missing pick rows');
+        }
+      } catch(err){ console.warn('[ScheduleInit] Friday secondary backfill failed', err); }
+    }, 2500);
   } catch(err){ console.warn('[ScheduleInit] Fatal error', err); }
 })();
