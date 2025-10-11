@@ -249,7 +249,16 @@ function recalcPoints(day){
   if(!picksLabels[day]) return;
   users.forEach(u=>{
     const picks = userPicks[day] && userPicks[day][u.username];
-    let pts=0; if(picks){ (coveredPicks[day]||[]).forEach((cov,i)=>{ if(!cov) return; if(picksMatch(picks[i], cov)) pts++; }); }
+    let pts=0; if(picks){
+      (coveredPicks[day]||[]).forEach((cov,i)=>{
+        if(!cov) return;
+        // For Saturday partial reveal, only count points for indices < partialSatRevealCount until full reveal
+        if(day==='Sat' && typeof window.partialSatRevealCount==='number'){
+          if(window.partialSatRevealCount < (picksLabels['Sat']||[]).length){
+            if(i >= window.partialSatRevealCount) return; // unrevealed game: do not award yet
+          }
+        }
+        if(picksMatch(picks[i], cov)) pts++; }); }
   if(day==='Thu') u.thurs = pts; else if(day==='Fri') u.fri = pts; else if(day==='Sat') u.sat = pts; else if(day==='Sun') u.sun = pts; else if(day==='Mon') u.mon = pts;
   });
 }
@@ -444,11 +453,41 @@ window.revealSaturday = function(){
       let pts=0; covers.forEach((c,i)=>{ if(!c || c==='PUSH') return; const pick=picks[i]; if(pick && picksMatch(pick,c)) pts++; });
       return pts; })( 'Sat', u); });
     users.forEach(u=>{ u.total = (u.thurs||0)+(u.fri||0)+(u.sat||0)+(u.sun||0)+(u.mon||0); });
+    // On full reveal set partial reveal count to full length so future scoring includes all games
+    if(Array.isArray(picksLabels['Sat'])) window.partialSatRevealCount = picksLabels['Sat'].length;
     updateLeaderboard();
     if(picksDay==='Sat') renderPicksTable('Sat');
     console.log('[Reveal] Saturday picks and points revealed.');
   } catch(e){ console.warn('Reveal Saturday failed', e); }
 };
+
+// ================= Partial Saturday Reveal Support =================
+// New requirement: first two Saturday games are now live (show picks + live scoring),
+// remaining games stay hidden until full reveal. We introduce a global counter
+// partialSatRevealCount controlling how many leading Saturday pick indices are public.
+// Default to 2 (first two games live) for this week.
+window.partialSatRevealCount = 2; // change to 0 to re-hide, or to 6 for full manual reveal
+
+// Admin helper to adjust on the fly if needed.
+window.setPartialSaturdayReveal = function(count){
+  count = Math.max(0, Math.min(count, (picksLabels['Sat']||[]).length));
+  window.partialSatRevealCount = count;
+  // Recalculate Saturday points respecting new reveal window
+  recalcPoints('Sat');
+  recalcTotal();
+  updateLeaderboard();
+  if(picksDay==='Sat') renderPicksTable('Sat');
+  console.log('[PartialReveal] Saturday reveal count set to', count);
+};
+
+// Initial recalculation in case page loaded after partial reveal directive applied
+try {
+  if(window.partialSatRevealCount>0 && userPicks && userPicks['Sat']){
+    recalcPoints('Sat');
+    recalcTotal();
+    updateLeaderboard();
+  }
+} catch(_e){}
 
 // Admin helper: reveal Sunday picks & scoring
 window.revealSunday = function(){
@@ -568,9 +607,33 @@ function renderPicksTable(day=picksDay){
   // We still keep userPicks['Sat'] populated internally for scoring later, but we do not
   // render individual selections to prevent copying.
   if(day==='Sat'){
-    const rows = users.map(u=> `<tr><td>${abbrevUser(u)}</td><td style="text-align:center;opacity:0.65;">Hidden</td></tr>`).join('');
-    tbl.innerHTML = '<tr><th class="th-small">Player</th><th class="th-small">Saturday Picks</th></tr>' +
-      '<tr><td colspan="2" style="text-align:center;padding:6px 10px;font-size:12px;color:#9fb2bf;">Saturday picks are hidden until results are posted.</td></tr>' + rows;
+    // Partial reveal logic: if partialSatRevealCount defined and < total columns, show first N picks, mask remainder.
+    const totalCols = (picksLabels['Sat']||[]).length;
+    const revealN = Math.min(window.partialSatRevealCount||0, totalCols);
+    if(revealN===0){
+      const rows = users.map(u=> `<tr><td>${abbrevUser(u)}</td><td style="text-align:center;opacity:0.65;">Hidden</td></tr>`).join('');
+      tbl.innerHTML = '<tr><th class="th-small">Player</th><th class="th-small">Saturday Picks</th></tr>' +
+        '<tr><td colspan="2" style="text-align:center;padding:6px 10px;font-size:12px;color:#9fb2bf;">Saturday picks are hidden until results are posted.</td></tr>' + rows;
+      return;
+    }
+    // Build a multi-column table: first N real picks, then a single Hidden aggregate column (not per hidden pick) to avoid leaking distribution.
+    let header = '<tr><th class="th-small">Player</th>';
+    for(let i=0;i<revealN;i++){ header += `<th class="th-small">${headerAbbr('Sat',i)}</th>`; }
+    if(revealN < totalCols){ header += '<th class="th-small">(Remaining Picks Hidden)</th>'; }
+    header += '</tr>';
+    const rows = users.map(u=>{
+      const picks = (userPicks['Sat']&&userPicks['Sat'][u.username])||[];
+      let cells='';
+      for(let i=0;i<revealN;i++){
+        const rawPick = picks[i]||'-';
+        const cov = (coveredPicks['Sat']||[])[i];
+        let cls=''; if(cov){ if(cov==='PUSH') cls='push'; else if(picksMatch(rawPick,cov)) cls='hit'; else if(rawPick && rawPick!=='-') cls='miss'; }
+        cells += `<td class="${cls}">${lookupAbbr(rawPick)}</td>`;
+      }
+      if(revealN < totalCols){ cells += `<td style="text-align:center;opacity:0.6;">Hidden</td>`; }
+      return `<tr><td>${abbrevUser(u)}</td>${cells}</tr>`;
+    }).join('');
+    tbl.innerHTML = header + rows;
     return;
   }
   if(day==='Sun'){

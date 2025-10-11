@@ -580,27 +580,20 @@ def friday_submit():
     picks = payload.get('picks') or []
     pin = str(payload.get('pin') or '').strip()
     if _is_friday_locked():
-        _audit('Fri', email, 'submit', 'rejected', 'locked')
         return jsonify({ 'ok': False, 'error': 'locked' }), 403
     if not email:
-        _audit('Fri', email, 'submit', 'rejected', 'email_required')
         return jsonify({ 'ok': False, 'error': 'email_required' }), 400
     if not isinstance(picks, list) or len(picks) != len(FRIDAY_LABELS):
-        _audit('Fri', email, 'submit', 'rejected', 'invalid_length')
         return jsonify({ 'ok': False, 'error': 'invalid_picks_length' }), 400
     if email not in ALLOWED_EMAILS:
-        _audit('Fri', email, 'submit', 'rejected', 'unauthorized')
         return jsonify({ 'ok': False, 'error': 'unauthorized_email' }), 403
     if not _check_pin(email, pin):
-        _audit('Fri', email, 'submit', 'rejected', 'invalid_pin')
         return jsonify({ 'ok': False, 'error': 'invalid_pin' }), 403
     norm = [str(p or '').strip().upper() for p in picks]
     FRIDAY_PICKS[email] = norm
     if not _save_friday(FRIDAY_PICKS):
-        _audit('Fri', email, 'submit', 'error', 'persist_failed')
         return jsonify({ 'ok': False, 'error': 'persist_failed' }), 500
     _append_friday_csv(email, norm)
-    _audit('Fri', email, 'submit', 'ok')
     return jsonify({ 'ok': True, 'saved': True })
 
 @app.route('/api/picks/friday/all')
@@ -664,41 +657,6 @@ def _csv_escape(val: str):
         return '"' + val.replace('"', '""') + '"'
     return val
 
-# ---- Submission audit logging (helps diagnose missing picks) ----
-AUDIT_LOG_FILE = pathlib.Path('data/picks/submit_audit.log')
-
-def _audit(day: str, email: str, action: str, status: str, detail: str = ''):
-    """Append a one-line audit record; best-effort (never raises). Fields: ts_iso,day,email,action,status,detail"""
-    try:
-        AUDIT_LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
-        ts = time.strftime('%Y-%m-%dT%H:%M:%S', time.gmtime())
-        safe_detail = (detail or '').replace('\n',' ').replace('\r',' ')[:300]
-        with AUDIT_LOG_FILE.open('a', encoding='utf-8') as f:
-            f.write(f"{ts},{day},{email},{action},{status},{safe_detail}\n")
-    except Exception:
-        pass
-
-@app.route('/api/debug/audit_tail')
-def api_audit_tail():
-    n = int(request.args.get('n','50'))
-    if n < 1: n = 1
-    if n > 500: n = 500
-    if not AUDIT_LOG_FILE.exists():
-        return jsonify({ 'ok': True, 'rows': [], 'exists': False })
-    try:
-        with AUDIT_LOG_FILE.open('r', encoding='utf-8') as f:
-            lines = f.read().strip().splitlines()
-        tail = lines[-n:]
-        parsed = []
-        for line in tail:
-            parts = line.split(',',5)
-            if len(parts) == 6:
-                ts, day, email, action, status, detail = parts
-                parsed.append({ 'ts': ts, 'day': day, 'email': email, 'action': action, 'status': status, 'detail': detail })
-        return jsonify({ 'ok': True, 'rows': parsed, 'count': len(parsed) })
-    except Exception as e:
-        return jsonify({ 'ok': False, 'error': 'audit_read_failed', 'detail': str(e) }), 500
-
 @app.route('/api/picks/export')
 def picks_export():
     """Export current (or locked) picks for a day as CSV. Supports day=Thu or day=Fri."""
@@ -748,6 +706,7 @@ def friday_log_info():
         stat = FRIDAY_CSV_LOG.stat()
         size = stat.st_size
         mtime = time.strftime('%Y-%m-%dT%H:%M:%S', time.gmtime(stat.st_mtime))
+        # Count rows cheaply (could be optimized if file grows, fine for small scale)
         with FRIDAY_CSV_LOG.open('r', encoding='utf-8') as f:
             lines = f.read().strip().splitlines()
         rows = max(0, len(lines) - 1) if lines else 0  # exclude header
@@ -956,13 +915,10 @@ def saturday_submit():
     # Day-level locking retained for backwards compatibility, but granular game
     # locks supersede it. If whole-day lock file exists, reject entire submission.
     if _is_saturday_locked():
-        _audit('Sat', email, 'submit', 'rejected', 'day_locked')
         return jsonify({ 'ok': False, 'error': 'day_locked' }), 403
     if not email:
-        _audit('Sat', email, 'submit', 'rejected', 'email_required')
         return jsonify({ 'ok': False, 'error': 'email_required' }), 400
     if not isinstance(picks, list):
-        _audit('Sat', email, 'submit', 'rejected', 'invalid_type')
         return jsonify({ 'ok': False, 'error': 'invalid_picks_type' }), 400
     # Allow partial submissions: truncate or pad to length; blanks allowed.
     if len(picks) > len(SATURDAY_LABELS):
@@ -970,10 +926,8 @@ def saturday_submit():
     if len(picks) < len(SATURDAY_LABELS):
         picks = picks + [''] * (len(SATURDAY_LABELS) - len(picks))
     if email not in ALLOWED_EMAILS:
-        _audit('Sat', email, 'submit', 'rejected', 'unauthorized')
         return jsonify({ 'ok': False, 'error': 'unauthorized_email' }), 403
     if not _check_pin(email, pin):
-        _audit('Sat', email, 'submit', 'rejected', 'invalid_pin')
         return jsonify({ 'ok': False, 'error': 'invalid_pin' }), 403
     # Preserve existing picks for any game already locked; update only unlocked indices.
     existing = SATURDAY_PICKS.get(email, [''] * len(SATURDAY_LABELS))
@@ -986,41 +940,9 @@ def saturday_submit():
             updated.append(str(val or '').strip().upper())
     SATURDAY_PICKS[email] = updated
     if not _save_saturday(SATURDAY_PICKS):
-        _audit('Sat', email, 'submit', 'error', 'persist_failed')
         return jsonify({ 'ok': False, 'error': 'persist_failed' }), 500
     _append_saturday_csv(email, SATURDAY_PICKS[email])
-    _audit('Sat', email, 'submit', 'ok')
     return jsonify({ 'ok': True, 'saved': True, 'lockedGames': [i for i in range(len(SATURDAY_LABELS)) if _is_saturday_game_locked(i)] })
-
-@app.route('/api/picks/saturday/admin_set', methods=['POST'])
-def saturday_admin_set():
-    """Admin: force set Saturday picks for a target email (optionally overriding locks). Body: { adminEmail,pin,targetEmail,picks,overrideLocked }"""
-    payload = request.get_json(force=True, silent=True) or {}
-    admin_email = (payload.get('adminEmail') or '').strip().lower()
-    pin = str(payload.get('pin') or '').strip()
-    target = (payload.get('targetEmail') or '').strip().lower()
-    picks = payload.get('picks') or []
-    override = bool(payload.get('overrideLocked'))
-    if admin_email != ADMIN_EMAIL or not _check_pin(admin_email, pin):
-        return jsonify({ 'ok': False, 'error': 'forbidden' }), 403
-    if target not in ALLOWED_EMAILS:
-        return jsonify({ 'ok': False, 'error': 'target_not_allowed' }), 400
-    # Normalize picks length
-    if len(picks) > len(SATURDAY_LABELS): picks = picks[:len(SATURDAY_LABELS)]
-    while len(picks) < len(SATURDAY_LABELS): picks.append('')
-    existing = SATURDAY_PICKS.get(target, ['']*len(SATURDAY_LABELS))
-    final = []
-    for i,val in enumerate(picks):
-        if not override and _is_saturday_game_locked(i):
-            final.append(existing[i] if i < len(existing) else '')
-        else:
-            final.append(str(val or '').strip().upper())
-    SATURDAY_PICKS[target] = final
-    if not _save_saturday(SATURDAY_PICKS):
-        return jsonify({ 'ok': False, 'error': 'persist_failed' }), 500
-    _append_saturday_csv(target, final)
-    _audit('Sat', target, 'admin_set', 'ok', f'override={override}')
-    return jsonify({ 'ok': True, 'updated': True, 'picks': final, 'overrideApplied': override })
 
 @app.route('/api/picks/saturday/status')
 def saturday_status():
@@ -1265,16 +1187,12 @@ def sunday_submit():
     picks = payload.get('picks') or []
     pin = str(payload.get('pin') or '').strip()
     if not email:
-        _audit('Sun', email, 'submit', 'rejected', 'email_required')
         return jsonify({ 'ok': False, 'error': 'email_required' }), 400
     if email not in ALLOWED_EMAILS:
-        _audit('Sun', email, 'submit', 'rejected', 'unauthorized')
         return jsonify({ 'ok': False, 'error': 'unauthorized_email' }), 403
     if not _check_pin(email, pin):
-        _audit('Sun', email, 'submit', 'rejected', 'invalid_pin')
         return jsonify({ 'ok': False, 'error': 'invalid_pin' }), 403
     if not isinstance(picks, list):
-        _audit('Sun', email, 'submit', 'rejected', 'invalid_type')
         return jsonify({ 'ok': False, 'error': 'invalid_picks_type' }), 400
     # Allow partial submissions; pad/truncate
     if len(picks) > len(SUNDAY_LABELS): picks = picks[:len(SUNDAY_LABELS)]
@@ -1288,40 +1206,9 @@ def sunday_submit():
             updated.append(str(val or '').strip().upper())
     SUNDAY_PICKS[email] = updated
     if not _save_sunday(SUNDAY_PICKS):
-        _audit('Sun', email, 'submit', 'error', 'persist_failed')
         return jsonify({ 'ok': False, 'error': 'persist_failed' }), 500
     _append_sunday_csv(email, updated)
-    _audit('Sun', email, 'submit', 'ok')
     return jsonify({ 'ok': True, 'saved': True, 'lockedGames': [i for i in range(len(SUNDAY_LABELS)) if _is_sunday_game_locked(i)] })
-
-@app.route('/api/picks/sunday/admin_set', methods=['POST'])
-def sunday_admin_set():
-    """Admin: force set Sunday picks for a target email. Body: { adminEmail,pin,targetEmail,picks,overrideLocked }"""
-    payload = request.get_json(force=True, silent=True) or {}
-    admin_email = (payload.get('adminEmail') or '').strip().lower()
-    pin = str(payload.get('pin') or '').strip()
-    target = (payload.get('targetEmail') or '').strip().lower()
-    picks = payload.get('picks') or []
-    override = bool(payload.get('overrideLocked'))
-    if admin_email != ADMIN_EMAIL or not _check_pin(admin_email, pin):
-        return jsonify({ 'ok': False, 'error': 'forbidden' }), 403
-    if target not in ALLOWED_EMAILS:
-        return jsonify({ 'ok': False, 'error': 'target_not_allowed' }), 400
-    if len(picks) > len(SUNDAY_LABELS): picks = picks[:len(SUNDAY_LABELS)]
-    while len(picks) < len(SUNDAY_LABELS): picks.append('')
-    existing = SUNDAY_PICKS.get(target, ['']*len(SUNDAY_LABELS))
-    final=[]
-    for i,val in enumerate(picks):
-        if not override and _is_sunday_game_locked(i):
-            final.append(existing[i] if i < len(existing) else '')
-        else:
-            final.append(str(val or '').strip().upper())
-    SUNDAY_PICKS[target] = final
-    if not _save_sunday(SUNDAY_PICKS):
-        return jsonify({ 'ok': False, 'error': 'persist_failed' }), 500
-    _append_sunday_csv(target, final)
-    _audit('Sun', target, 'admin_set', 'ok', f'override={override}')
-    return jsonify({ 'ok': True, 'updated': True, 'picks': final, 'overrideApplied': override })
 
 @app.route('/api/picks/sunday/status')
 def sunday_status():
