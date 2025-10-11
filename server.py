@@ -348,6 +348,16 @@ def _snapshot_latest_saturday_from_log():
 # --- Hot reload support (mtime-based) for Saturday picks ---
 _SATURDAY_FILE_MTIME = SATURDAY_FILE.stat().st_mtime if SATURDAY_FILE.exists() else None
 
+# Post-definition startup sync: if CSV present, rebuild picks immediately.
+try:
+    if SATURDAY_CSV_LOG.exists():
+        _tmp_latest = _snapshot_latest_saturday_from_log()
+        if isinstance(_tmp_latest, dict) and _tmp_latest:
+            SATURDAY_PICKS = _tmp_latest
+            _save_saturday(SATURDAY_PICKS)
+except Exception:
+    pass
+
 def _maybe_reload_saturday():
     """Reload Saturday picks if either the JSON snapshot OR the CSV log changed.
 
