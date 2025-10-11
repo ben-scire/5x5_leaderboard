@@ -29,7 +29,12 @@
   <h1>Saturday Picks Submission</h1>
   <p style="font-size:13px;max-width:780px;">Select one team for each matchup (ATS). You can overwrite until locked. All picks stored immediately. Abbreviations auto-uppercase.</p>
   <div class="card">
-    <div class="row"><label>Email <input id="email" type="email" required placeholder="you@example.com" /></label></div>
+    <div class="row"><label>Email
+      <select id="email" style="width:100%;padding:8px 10px;border:1px solid #314355;background:#0f1419;color:#e5e5e5;border-radius:6px;font-size:14px;">
+        <option value="">Select your email</option>
+      </select>
+    </label></div>
+    <div class="row"><label>PIN <input id="pin" type="text" inputmode="numeric" pattern="\\d{4}" maxlength="4" placeholder="4-digit PIN" style="width:160px;padding:8px 10px;border:1px solid #314355;background:#0f1419;color:#e5e5e5;border-radius:6px;font-size:14px;letter-spacing:2px;text-align:center;" /></label></div>
     <div id="matchups" class="grid"></div>
     <div class="row" style="margin-top:18px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
       <button id="loadBtn" type="button">Load Existing</button>
@@ -119,14 +124,16 @@ async function loadExisting(){
 }
 async function savePicks(){
   const email = document.getElementById('email').value.trim().toLowerCase();
+  const pin = document.getElementById('pin').value.trim();
   const status = document.getElementById('status');
   if(!email){ status.textContent='Enter email'; status.className='error'; return; }
+  if(pin.length!==4){ status.textContent='Enter 4-digit PIN'; status.className='error'; return; }
   const inputs = Array.from(document.querySelectorAll('input[data-idx]'));
   const picks = inputs.map(inp=> (inp.value||'').trim().toUpperCase());
   if(picks.some(p=>!p)){ status.textContent='Select all picks'; status.className='error'; return; }
   status.textContent='Saving...'; status.className='';
   try {
-    const r = await fetch('/api/picks/saturday/submit',{method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ email, picks })});
+    const r = await fetch('/api/picks/saturday/submit',{method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ email, pin, picks })});
     const j = await r.json();
     if(!r.ok || !j.ok){ status.textContent=j.error||'Save failed'; status.className='error'; return; }
     status.textContent='Saved'; status.className='success';
@@ -152,9 +159,13 @@ async function loadStatus(){
  document.getElementById('saveBtn').addEventListener('click', savePicks);
  document.getElementById('lockBtn').addEventListener('click', lockNow);
  document.getElementById('refreshStatus').addEventListener('click', loadStatus);
+ async function loadEmails(){
+  try { const r= await fetch('/api/pins/emails?ts='+Date.now()); const j= await r.json(); if(j.ok){ const sel=document.getElementById('email'); j.emails.forEach(e=>{ const opt=document.createElement('option'); opt.value=e; opt.textContent=e; sel.appendChild(opt); }); } } catch(e){}
+ }
  setInterval(refreshLockStatus, 15000);
  refreshLockStatus();
  setTimeout(loadStatus, 400);
+ loadEmails();
 </script>
 </body>
 </html>

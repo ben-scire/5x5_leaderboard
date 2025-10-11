@@ -2,7 +2,7 @@
 from flask import Flask, jsonify, send_from_directory, request
 import time, os, json, pathlib
 
-VERSION = 'week-multi-0'
+VERSION = 'week-multi-1'
 
 # Final outcomes for the single Thursday game
 RESULTS = ['NYG', 'OVER', 'YES']  # Thursday: spread winner, total, prop
@@ -58,6 +58,65 @@ else:
     SOURCE = 'embedded'
 
 ALL_USERS = sorted(HARD_PICKS.keys())
+
+# ---- PIN system (simple 4-digit per email) ----
+PINS_FILE = pathlib.Path('data/picks/pins.json')
+ALLOWED_EMAILS_FILE = pathlib.Path('data/allowed_emails.json')
+
+def _load_allowed_emails():
+    emails = set(ALL_USERS)
+    try:
+        if ALLOWED_EMAILS_FILE.exists():
+            with ALLOWED_EMAILS_FILE.open('r', encoding='utf-8') as f:
+                data = json.load(f)
+            if isinstance(data, list):
+                for e in data:
+                    if isinstance(e, str) and '@' in e:
+                        emails.add(e.strip().lower())
+    except Exception:
+        pass
+    return sorted(emails)
+
+def _load_or_create_pins(emails):
+    # Return dict email->pin (4-digit string). Create if missing or missing emails.
+    existing = {}
+    if PINS_FILE.exists():
+        try:
+            with PINS_FILE.open('r', encoding='utf-8') as f:
+                data = json.load(f)
+            if isinstance(data, dict):
+                for k,v in data.items():
+                    if isinstance(k,str) and isinstance(v,str) and len(v)==4 and v.isdigit():
+                        existing[k.lower()] = v
+        except Exception:
+            existing = {}
+    changed = False
+    import random
+    used = set(existing.values())
+    for e in emails:
+        if e not in existing:
+            # generate unique pin
+            for _ in range(20):
+                pin = f"{random.randint(0,9999):04d}"
+                if pin not in used:
+                    break
+            existing[e] = pin
+            used.add(pin)
+            changed = True
+    if changed:
+        try:
+            PINS_FILE.parent.mkdir(parents=True, exist_ok=True)
+            with PINS_FILE.open('w', encoding='utf-8') as f:
+                json.dump(existing, f, indent=2)
+        except Exception:
+            pass
+    return existing
+
+ALLOWED_EMAILS = _load_allowed_emails()
+PIN_MAP = _load_or_create_pins(ALLOWED_EMAILS)
+
+def _check_pin(email: str, pin: str):
+    return PIN_MAP.get(email.lower()) == pin
 TOTAL_POSSIBLE = len(RESULTS) + len(FRIDAY_RESULTS) + len(SATURDAY_RESULTS)
 
 app = Flask(__name__, static_folder='.', static_url_path='')
@@ -395,12 +454,17 @@ def friday_submit():
     payload = request.get_json(force=True, silent=True) or {}
     email = (payload.get('email') or '').strip().lower()
     picks = payload.get('picks') or []
+    pin = str(payload.get('pin') or '').strip()
     if _is_friday_locked():
         return jsonify({ 'ok': False, 'error': 'locked' }), 403
     if not email:
         return jsonify({ 'ok': False, 'error': 'email_required' }), 400
     if not isinstance(picks, list) or len(picks) != len(FRIDAY_LABELS):
         return jsonify({ 'ok': False, 'error': 'invalid_picks_length' }), 400
+    if email not in ALLOWED_EMAILS:
+        return jsonify({ 'ok': False, 'error': 'unauthorized_email' }), 403
+    if not _check_pin(email, pin):
+        return jsonify({ 'ok': False, 'error': 'invalid_pin' }), 403
     norm = [str(p or '').strip().upper() for p in picks]
     FRIDAY_PICKS[email] = norm
     if not _save_friday(FRIDAY_PICKS):
@@ -604,6 +668,21 @@ def api_leaderboard():
         'generated': int(time.time()*1000)
     })
 
+@app.route('/api/pins/emails')
+def api_pins_emails():
+    """Return list of selectable emails (no pins)."""
+    return jsonify({ 'ok': True, 'emails': ALLOWED_EMAILS, 'version': VERSION })
+
+@app.route('/api/pins/admin')
+def api_pins_admin():
+    # Simple safeguard: require query token matching env ADMIN_TOKEN (optional)
+    token = request.args.get('token')
+    admin_token = os.environ.get('ADMIN_TOKEN')
+    if admin_token and token != admin_token:
+        return jsonify({ 'ok': False, 'error': 'forbidden' }), 403
+    # Return full pin map for admin visibility.
+    return jsonify({ 'ok': True, 'pins': PIN_MAP })
+
 @app.route('/api/picks/public')
 def api_picks_public():
     day = (request.args.get('day') or '').lower()
@@ -669,12 +748,17 @@ def saturday_submit():
     payload = request.get_json(force=True, silent=True) or {}
     email = (payload.get('email') or '').strip().lower()
     picks = payload.get('picks') or []
+    pin = str(payload.get('pin') or '').strip()
     if _is_saturday_locked():
         return jsonify({ 'ok': False, 'error': 'locked' }), 403
     if not email:
         return jsonify({ 'ok': False, 'error': 'email_required' }), 400
     if not isinstance(picks, list) or len(picks) != len(SATURDAY_LABELS):
         return jsonify({ 'ok': False, 'error': 'invalid_picks_length', 'expected': len(SATURDAY_LABELS) }), 400
+    if email not in ALLOWED_EMAILS:
+        return jsonify({ 'ok': False, 'error': 'unauthorized_email' }), 403
+    if not _check_pin(email, pin):
+        return jsonify({ 'ok': False, 'error': 'invalid_pin' }), 403
     norm = [str(p or '').strip().upper() for p in picks]
     SATURDAY_PICKS[email] = norm
     if not _save_saturday(SATURDAY_PICKS):
