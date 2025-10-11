@@ -45,15 +45,43 @@
         away: g.away, awayAbbr: g.awayAbbr,
         home: g.home, homeAbbr: g.homeAbbr,
         lineHome: g.lineHome,
-        total: g.total
+        total: g.total,
+        start: g.start || g.startTime || ''
       }));
       const picks = (def.picks||[]).map(p=> p.label);
       picksLabels[dayKey] = picks;
-  if(dayKey==='Fri'){ window.fridayGames = games; window.fridayStates = games.map((g,i)=>({ status:'STATUS_SCHEDULED', score:'0-0', home:0, away:0, period:0, clock:'', startTimeStr:g.start || '', meta:{ home:{abbr:g.homeAbbr}, away:{abbr:g.awayAbbr} } })); window.fridayStartTimes = games.map(g=> g.start || ''); }
-  else if(dayKey==='Sat'){ window.saturdayGames = games; window.saturdayStates = games.map((g,i)=>({ status:'STATUS_SCHEDULED', score:'0-0', home:0, away:0, period:0, clock:'', startTimeStr:g.start || '', meta:{ home:{abbr:g.homeAbbr}, away:{abbr:g.awayAbbr} } })); window.saturdayStartTimes = games.map(g=> g.start || ''); }
-      else if(dayKey==='Sun'){ window.sundayGames = games; window.sundayStates = games.map((g,i)=>({ status:'STATUS_SCHEDULED', score:'0-0', home:0, away:0, period:0, clock:'', startTimeStr:g.start || '', meta:{ home:{abbr:g.homeAbbr}, away:{abbr:g.awayAbbr} } })); window.sundayStartTimes = games.map(g=> g.start || ''); }
-      else if(dayKey==='Mon'){ window.mondayGames = games; window.mondayStates = games.map((g,i)=>({ status:'STATUS_SCHEDULED', score:'0-0', home:0, away:0, period:0, clock:'', startTimeStr:g.start || '', meta:{ home:{abbr:g.homeAbbr}, away:{abbr:g.awayAbbr} } })); window.mondayStartTimes = games.map(g=> g.start || ''); }
-  else if(dayKey==='Thu'){ /* Thursday already historical; keep existing config if present */ }
+
+      // Helper to mutate existing const-declared arrays (defined in config.js) so references elsewhere stay valid.
+      function assignDayArrays(arrNameBase, gamesArr){
+        const gamesVar = window[arrNameBase+"Games"]; // e.g., fridayGames
+        const statesVar = window[arrNameBase+"States"]; // e.g., fridayStates
+        const timesName = arrNameBase+"StartTimes";
+        const timesVar = window[timesName];
+        // Mutate games array
+        if(Array.isArray(gamesVar)){
+          gamesVar.splice(0, gamesVar.length, ...gamesArr);
+        } else {
+          window[arrNameBase+"Games"] = gamesArr; // fallback if not pre-declared
+        }
+        const newStates = gamesArr.map(g=>({ status:'STATUS_SCHEDULED', score:'0-0', home:0, away:0, period:0, clock:'', startTimeStr:g.start || '', meta:{ home:{abbr:g.homeAbbr}, away:{abbr:g.awayAbbr} } }));
+        if(Array.isArray(statesVar)){
+          statesVar.splice(0, statesVar.length, ...newStates);
+        } else {
+          window[arrNameBase+"States"] = newStates;
+        }
+        const newTimes = gamesArr.map(g=> g.start || '');
+        if(Array.isArray(timesVar)){
+          timesVar.splice(0, timesVar.length, ...newTimes);
+        } else {
+          window[timesName] = newTimes;
+        }
+      }
+
+      if(dayKey==='Fri') assignDayArrays('friday', games);
+      else if(dayKey==='Sat') assignDayArrays('saturday', games);
+      else if(dayKey==='Sun') assignDayArrays('sunday', games);
+      else if(dayKey==='Mon') assignDayArrays('monday', games);
+      else if(dayKey==='Thu'){ /* Thursday already historical; keep existing config if present */ }
     }
 
   ['Thu','Fri','Sat','Sun','Mon'].forEach(applyDay);
