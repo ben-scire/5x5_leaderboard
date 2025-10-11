@@ -65,6 +65,10 @@ def _aggregate_all_users():
 
 ALL_USERS = _aggregate_all_users()
 
+def _refresh_all_users():
+    global ALL_USERS
+    ALL_USERS = _aggregate_all_users()
+
 # ---- PIN system (simple 4-digit per email) ----
 PINS_FILE = pathlib.Path('data/picks/pins.json')
 ALLOWED_EMAILS_FILE = pathlib.Path('data/allowed_emails.json')
@@ -520,6 +524,7 @@ def friday_all():
 @app.route('/api/picks/friday/status')
 def friday_status():
     """Return list of submitted emails and which known Thursday users haven't submitted Friday picks yet."""
+    _refresh_all_users()
     submitted = sorted(FRIDAY_PICKS.keys())
     # Use Thursday ALL_USERS as the pool; if override file replaced, ALL_USERS already reflects it.
     missing = [u for u in ALL_USERS if u not in FRIDAY_PICKS]
@@ -818,6 +823,7 @@ def saturday_submit():
 
 @app.route('/api/picks/saturday/status')
 def saturday_status():
+    _refresh_all_users()
     submitted = sorted(SATURDAY_PICKS.keys())
     missing = [u for u in ALL_USERS if u not in SATURDAY_PICKS]
     return jsonify({ 'ok': True, 'submitted': submitted, 'missing': missing, 'submittedCount': len(submitted), 'missingCount': len(missing), 'locked': _is_saturday_locked() })
