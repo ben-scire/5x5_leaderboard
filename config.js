@@ -24,8 +24,9 @@ let currentDay = 'Thu';
 let scoreboardDay = 'Thu';
 
 // Placeholder game arrays (allow existing UI loops to run) – real schedule from /api/schedule later.
-const fridayGames = []; const fridayStates = [];
-const saturdayGames = []; const saturdayStates = [];
+// Include parallel StartTimes arrays for each day to avoid ReferenceError in updateScoreboard
+const fridayGames = []; const fridayStates = []; const fridayStartTimes = [];
+const saturdayGames = []; const saturdayStates = []; const saturdayStartTimes = [];
 const sundayGames = []; const sundayStartTimes = []; const sundayStates = [];
 const mondayGames = []; const mondayStartTimes = []; const mondayStates = [];
 
