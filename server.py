@@ -815,8 +815,12 @@ def _norm_team(val: str):
     if not val: return ''
     v = val.strip().upper()
     # Basic synonym collapsing for fairness
+    # Handle short forms first
+    if v in ('MIZ', 'MIZZOU'):
+        v = 'MISSOURI'
     v = v.replace('OHIO ST', 'OHIO STATE')
-    v = v.replace('MISSOURI', 'MISSOURI').replace('MIZZOU', 'MISSOURI')
+    # Ensure any remaining variants of Missouri map correctly
+    v = v.replace('MISSOURI', 'MISSOURI')
     v = v.replace('ALABAMA', 'ALABAMA')
     v = v.replace('INDIANA', 'INDIANA')
     v = v.replace('OREGON', 'OREGON')
