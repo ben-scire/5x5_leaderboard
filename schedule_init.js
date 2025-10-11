@@ -85,6 +85,11 @@
     }
 
   ['Thu','Fri','Sat','Sun','Mon'].forEach(applyDay);
+  // If Thursday labels missing (because schedule API no longer returns Thu), synthesize generic labels for scoring table.
+  if(!Array.isArray(picksLabels['Thu']) || !picksLabels['Thu'].length){
+    // 3 Thursday picks: Spread, Total, Prop
+    picksLabels['Thu'] = ['THU SPREAD','THU TOTAL','THU PROP'];
+  }
 
     // Seed finalized Friday winners (static directive) so frontend scoring updates immediately.
     try {
@@ -107,9 +112,9 @@
     // Pre-create covered arrays for new days if not set
     ['Fri','Sat','Sun','Mon'].forEach(d=>{ if(!Array.isArray(coveredPicks[d])) coveredPicks[d] = Array((picksLabels[d]||[]).length).fill(null); });
 
-    // Fetch public picks for each active day (except Thurs locked) to hydrate scoring early
+    // Fetch public picks for each active day (include Thu so scores display using authoritative picks)
     if(typeof window==='undefined' || window.LIVE_FETCH_ENABLED!==false){
-      await Promise.all(['Fri','Sat','Sun','Mon'].map(async day=>{
+      await Promise.all(['Thu','Fri','Sat','Sun','Mon'].map(async day=>{
       if(!(picksLabels[day]||[]).length) return;
       try {
         const r = await fetch('/api/picks/public?day='+day);
