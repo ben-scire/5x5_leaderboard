@@ -151,9 +151,12 @@ def main():
     password = os.environ.get('SMTP_PASS')
     sender = os.environ.get('PIN_FROM') or user or 'no-reply@example.com'
 
-    if not args.dry_run and (not host or not user or not password):
-        print('Missing SMTP env vars (SMTP_HOST, SMTP_USER, SMTP_PASS). Use --dry-run to preview.', file=sys.stderr)
-        sys.exit(2)
+    if not args.dry_run:
+        missing = [name for name,val in [('SMTP_HOST',host),('SMTP_USER',user),('SMTP_PASS',password)] if not val]
+        if missing:
+            print(f"Missing required SMTP env vars: {', '.join(missing)}. Set them or use --dry-run to preview.", file=sys.stderr)
+            print("Example (PowerShell): $env:SMTP_HOST='smtp.gmail.com'; $env:SMTP_USER='you@gmail.com'; $env:SMTP_PASS='app_password'", file=sys.stderr)
+            sys.exit(2)
 
     send_all(pins, sender, host, port, user, password, args.dry_run, args.only, args.skip_already)
 
