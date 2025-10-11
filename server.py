@@ -10,7 +10,11 @@ RESULTS = ['NYG', 'OVER', 'YES']  # Thursday: spread winner, total, prop
 # Friday final winners (spread picks): index aligned with FRIDAY_LABELS
 FRIDAY_RESULTS = ['USF', 'WASH']
 # Saturday results placeholder (filled when games final). Length = 6 games
-SATURDAY_RESULTS = [None]*6
+SATURDAY_RESULTS = [
+    'OHIO STATE',   # Game 1 final (Ohio State covers -15.5)
+    'MISSOURI',     # Game 2 final (Missouri covers +3.5 vs Alabama)
+    None, None, None, None
+]
 # Sunday results placeholder (8 games)
 SUNDAY_RESULTS = [None]*8
 
@@ -797,44 +801,55 @@ def friday_log_latest():
     except Exception as e:
         return jsonify({ 'ok': False, 'error': 'log_tail_failed', 'detail': str(e) }), 500
 
+def _norm_team(val: str):
+    if not val: return ''
+    v = val.strip().upper()
+    # Basic synonym collapsing for fairness
+    v = v.replace('OHIO ST', 'OHIO STATE')
+    v = v.replace('MISSOURI', 'MISSOURI').replace('MIZZOU', 'MISSOURI')
+    v = v.replace('ALABAMA', 'ALABAMA')
+    v = v.replace('INDIANA', 'INDIANA')
+    v = v.replace('OREGON', 'OREGON')
+    v = v.replace('OKLAHOMA', 'OKLAHOMA')
+    v = v.replace('TEXAS', 'TEXAS')
+    v = v.replace('GEORGIA', 'GEORGIA')
+    v = v.replace('AUBURN', 'AUBURN')
+    v = v.replace('BYU', 'BYU')
+    v = v.replace('ARIZONA', 'ARIZONA')
+    return v
+
 def compute_scores():
-    """Return sorted list of scoreboard entries for all users (Thu + Fri + Sat + Sun)."""
-    # Ensure we are using latest Saturday CSV data before scoring
-    _maybe_reload_saturday()
+    """Return sorted list of scoreboard entries for all users (Thu + Fri + Sat + Sun) with normalization."""
+    _maybe_reload_saturday()  # refresh Saturday picks if CSV changed
     entries = []
     for email in ALL_USERS:
-        # Thursday
         thu_picks = HARD_PICKS[email]
         thu_answered = sum(1 for p in thu_picks if p)
         thu_score = sum(1 for a, b in zip(thu_picks, RESULTS) if a == b)
 
-        # Friday (may be absent if user hasn't submitted)
         fri_picks = FRIDAY_PICKS.get(email, [])
         fri_answered = sum(1 for p in fri_picks if p)
         fri_score = 0
         for a, b in zip(fri_picks, FRIDAY_RESULTS):
-            if a == b:
+            if b and _norm_team(a) == _norm_team(b):
                 fri_score += 1
 
-        # Saturday
         sat_picks = SATURDAY_PICKS.get(email, [])
         sat_answered = sum(1 for p in sat_picks if p)
         sat_score = 0
         for a, b in zip(sat_picks, SATURDAY_RESULTS):
-            if b and a == b:
+            if b and _norm_team(a) == _norm_team(b):
                 sat_score += 1
 
-        # Sunday
         sun_picks = SUNDAY_PICKS.get(email, []) if 'SUNDAY_PICKS' in globals() else []
         sun_answered = sum(1 for p in sun_picks if p)
         sun_score = 0
         for a, b in zip(sun_picks, SUNDAY_RESULTS):
-            if b and a == b:
+            if b and _norm_team(a) == _norm_team(b):
                 sun_score += 1
 
         total_score = thu_score + fri_score + sat_score + sun_score
         total_answered = thu_answered + fri_answered + sat_answered + sun_answered
-
         entries.append({
             'email': email,
             'score': total_score,
@@ -924,6 +939,40 @@ def api_picks_public():
             'ok': True,
             'entries': { email: { 'picks': picks, 'ts': now } for email, picks in SATURDAY_PICKS.items() }
         })
+    if day.startswith('sun'):
+        now = int(time.time()*1000)
+        _maybe_reload_sunday()
+        return jsonify({
+            'ok': True,
+            'entries': { email: { 'picks': picks, 'ts': now } for email, picks in SUNDAY_PICKS.items() }
+        })
+    return jsonify({ 'ok': False, 'error': 'unsupported_day' }), 400
+
+@app.route('/api/picks/status/<day_key>')
+def picks_status_generic(day_key):
+    """Unified status endpoint so frontend can call /api/picks/status/Thu etc.
+    Returns submitted + missing arrays similar to existing per-day endpoints.
+    """
+    dk = (day_key or '').strip().lower()
+    _refresh_all_users()
+    if dk.startswith('thu'):
+        submitted = sorted(HARD_PICKS.keys())
+        missing = []
+        return jsonify({ 'ok': True, 'day': 'Thu', 'submitted': submitted, 'missing': missing, 'submittedCount': len(submitted), 'missingCount': 0 })
+    if dk.startswith('fri'):
+        submitted = sorted(FRIDAY_PICKS.keys())
+        missing = [u for u in ALL_USERS if u not in FRIDAY_PICKS]
+        return jsonify({ 'ok': True, 'day': 'Fri', 'submitted': submitted, 'missing': missing, 'submittedCount': len(submitted), 'missingCount': len(missing) })
+    if dk.startswith('sat'):
+        _maybe_reload_saturday()
+        submitted = sorted(SATURDAY_PICKS.keys())
+        missing = [u for u in ALL_USERS if u not in SATURDAY_PICKS]
+        return jsonify({ 'ok': True, 'day': 'Sat', 'submitted': submitted, 'missing': missing, 'submittedCount': len(submitted), 'missingCount': len(missing) })
+    if dk.startswith('sun'):
+        _maybe_reload_sunday()
+        submitted = sorted(SUNDAY_PICKS.keys())
+        missing = [u for u in ALL_USERS if u not in SUNDAY_PICKS]
+        return jsonify({ 'ok': True, 'day': 'Sun', 'submitted': submitted, 'missing': missing, 'submittedCount': len(submitted), 'missingCount': len(missing) })
     return jsonify({ 'ok': False, 'error': 'unsupported_day' }), 400
 
 @app.route('/api/debug/thu')
