@@ -29,9 +29,41 @@ def _load_thursday():
     return {}
 
 HARD_PICKS = _load_thursday()
-SOURCE = 'file' if HARD_PICKS else 'empty'
+if not HARD_PICKS:
+    # Fallback embedded picks only if JSON missing/empty (ensures historical Thursday data still available)
+    HARD_PICKS = {
+        "kylejkz11@gmail.com": ["NYG", "OVER", "YES"],
+        "max1solov@gmail.com": ["NYG", "OVER", "YES"],
+        "samuel.lehman3337@gmail.com": ["PHI", "OVER", "YES"],
+        "shawnscottcarl@gmail.com": ["PHI", "OVER", "YES"],
+        "finsmaniac1551@gmail.com": ["PHI", "OVER", "NO"],
+        "jakelehman100@gmail.com": ["NYG", "OVER", "YES"],
+        "hankrudden@yahoo.com": ["NYG", "UNDER", "NO"],
+        "scire.ben@gmail.com": ["NYG", "OVER", "YES"],
+        "williamjabbott22@gmail.com": ["PHI", "OVER", "YES"],
+        "timjbohlman@gmail.com": ["NYG", "OVER", "YES"],
+        "goodnoughdylan@gmail.com": ["NYG", "UNDER", "YES"],
+        "jaked9577@yahoo.com": ["PHI", "OVER", "YES"],
+        "sam.scire@hotmail.com": ["PHI", "OVER", "YES"],
+        "soligonaustin@outlook.com": ["PHI", "OVER", "YES"],
+        "amacdonald171@gmail.com": ["PHI", "OVER", "YES"],
+        "jlindsey3428@gmail.com": ["NYG", "OVER", "YES"],
+        "wyaggy3@gmail.com": ["PHI", "UNDER", "YES"]
+    }
+    SOURCE = 'embedded_fallback'
+else:
+    SOURCE = 'file'
 
-ALL_USERS = sorted(HARD_PICKS.keys()) if HARD_PICKS else []
+def _aggregate_all_users():
+    base = set(HARD_PICKS.keys())
+    # Friday/Saturday picks dicts may not yet be defined; guard via globals()
+    if 'FRIDAY_PICKS' in globals():
+        base.update(FRIDAY_PICKS.keys())
+    if 'SATURDAY_PICKS' in globals():
+        base.update(SATURDAY_PICKS.keys())
+    return sorted(base)
+
+ALL_USERS = _aggregate_all_users()
 
 # ---- PIN system (simple 4-digit per email) ----
 PINS_FILE = pathlib.Path('data/picks/pins.json')
