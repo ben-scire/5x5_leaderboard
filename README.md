@@ -2,6 +2,8 @@
 
 This project serves a live leaderboard plus multi-day pick submission (Thu–Mon) via a Flask backend.
 
+Update (Friday complete): Friday submission page has been retired (games locked/final). Only Saturday submission link remains active on the homepage.
+
 ## Components
 
 * `leaderboard.html` + JS/CSS – Frontend UI (chart, scoreboard, picks, Sunday form)
@@ -10,7 +12,7 @@ This project serves a live leaderboard plus multi-day pick submission (Thu–Mon
 * `09_15_Picks.csv` – Authoritative Monday (MNF) picks source (locked)
 
 ## Current Core API (Token Auth)
-
+ 
 Token / Account (all JSON):
 
 | Method | Path | Purpose |
