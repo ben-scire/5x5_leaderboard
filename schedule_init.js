@@ -153,5 +153,33 @@
     } catch(e){ console.warn('[ScheduleInit] user seed/recalc failed', e); }
     // Trigger scoreboard refresh now that schedule is ready
     if(typeof updateScoreboard==='function') try { updateScoreboard(); } catch(_e){}
+
+    // Fallback: some users may appear without Friday picks due to race/caching; re-fetch once and merge.
+    setTimeout(async () => {
+      try {
+        const missing = (Array.isArray(users)? users: []).filter(u=>{
+          const arr = userPicks['Fri'] && userPicks['Fri'][u.username];
+          if(!arr) return true;
+          return arr.every(x=>!x); // all blanks
+        });
+        if(!missing.length) return; // nothing to repair
+        const r = await fetch('/api/picks/public?day=Fri',{cache:'no-store'});
+        if(!r.ok) return;
+        const j = await r.json();
+        const entries = (j && j.entries) || {};
+        Object.keys(entries).forEach(email=>{
+          const rec = entries[email];
+          if(!rec || !Array.isArray(rec.picks)) return;
+          const needed = picksLabels['Fri'] ? picksLabels['Fri'].length : rec.picks.length;
+            let adj = rec.picks.slice(0, needed);
+            while(adj.length < needed) adj.push('');
+            userPicks['Fri'][email] = adj;
+        });
+        if(typeof recalcPoints==='function'){ recalcPoints('Fri'); recalcTotal && recalcTotal(); }
+        if(typeof updateLeaderboard==='function') updateLeaderboard();
+        if(typeof renderPicksTable==='function' && picksDay==='Fri') renderPicksTable('Fri');
+        console.log('[ScheduleInit] Friday completeness repair executed for', missing.length, 'users');
+      } catch(err){ console.warn('[ScheduleInit] Friday fallback repair failed', err); }
+    }, 1200);
   } catch(err){ console.warn('[ScheduleInit] Fatal error', err); }
 })();
