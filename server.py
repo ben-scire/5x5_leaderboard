@@ -4,6 +4,7 @@ from flask import Flask, jsonify, send_from_directory, request
 import time, os, json, pathlib
 
 VERSION = 'week-multi-4'  # bumped to force client cache bust (query params) after adding debug + cache headers
+FORCE_SATURDAY_JSON = os.environ.get('FORCE_SATURDAY_JSON', '0') in ('1','true','TRUE','yes','YES')
 
 # Final outcomes for the single Thursday game
 RESULTS = ['NYG', 'OVER', 'YES']  # Thursday: spread winner, total, prop
@@ -350,7 +351,7 @@ _SATURDAY_FILE_MTIME = SATURDAY_FILE.stat().st_mtime if SATURDAY_FILE.exists() e
 
 # Post-definition startup sync: if CSV present, rebuild picks immediately.
 try:
-    if SATURDAY_CSV_LOG.exists():
+    if not FORCE_SATURDAY_JSON and SATURDAY_CSV_LOG.exists():
         _tmp_latest = _snapshot_latest_saturday_from_log()
         if isinstance(_tmp_latest, dict) and _tmp_latest:
             SATURDAY_PICKS = _tmp_latest
@@ -368,6 +369,18 @@ def _maybe_reload_saturday():
     global SATURDAY_PICKS, _SATURDAY_FILE_MTIME, _SATURDAY_CSV_MTIME
     reloaded = False
     try:
+        if FORCE_SATURDAY_JSON:
+            # Ignore CSV; always reload from JSON snapshot if it changed.
+            if SATURDAY_FILE.exists():
+                json_mtime = SATURDAY_FILE.stat().st_mtime
+                if _SATURDAY_FILE_MTIME is None or json_mtime > _SATURDAY_FILE_MTIME:
+                    data = _load_saturday()
+                    if isinstance(data, dict):
+                        SATURDAY_PICKS = data
+                        _SATURDAY_FILE_MTIME = json_mtime
+                        reloaded = True
+                        _refresh_all_users()
+            return reloaded
         # CSV first
         if SATURDAY_CSV_LOG.exists():
             csv_mtime = SATURDAY_CSV_LOG.stat().st_mtime
@@ -1211,6 +1224,39 @@ def admin_saturday_rebuild():
         'changed': sorted(changed),
         'snapshotSaved': True
     })
+
+@app.route('/api/admin/saturday/force_json', methods=['POST'])
+def admin_saturday_force_json():
+    """Admin: Forcefully overwrite Saturday picks from supplied JSON body { picks: { email: [..6..] } }.
+    Respects ADMIN_TOKEN if set. Writes saturday_picks.json and reloads in-memory without touching CSV log.
+    Intended for emergency recovery when CSV ingestion is broken on Render.
+    """
+    token = request.args.get('token') or request.headers.get('X-Admin-Token')
+    admin_token = os.environ.get('ADMIN_TOKEN')
+    if admin_token and token != admin_token:
+        return jsonify({ 'ok': False, 'error': 'forbidden' }), 403
+    payload = request.get_json(force=True, silent=True) or {}
+    raw = payload.get('picks') or {}
+    if not isinstance(raw, dict):
+        return jsonify({ 'ok': False, 'error': 'invalid_payload' }), 400
+    cleaned = {}
+    for email, picks in raw.items():
+        if not isinstance(email, str) or '@' not in email:
+            continue
+        if not isinstance(picks, list):
+            continue
+        adj = picks[:len(SATURDAY_LABELS)]
+        while len(adj) < len(SATURDAY_LABELS):
+            adj.append('')
+        cleaned[email.lower()] = [ (p or '').strip().upper() for p in adj ]
+    if not cleaned:
+        return jsonify({ 'ok': False, 'error': 'empty_after_clean' }), 400
+    # Overwrite in-memory + snapshot
+    globals()['SATURDAY_PICKS'] = cleaned
+    if not _save_saturday(SATURDAY_PICKS):
+        return jsonify({ 'ok': False, 'error': 'persist_failed' }), 500
+    _refresh_all_users()
+    return jsonify({ 'ok': True, 'count': len(SATURDAY_PICKS), 'forced': True, 'forceEnvActive': FORCE_SATURDAY_JSON })
 
 # --- New Saturday per-game lock endpoints ---
 ADMIN_EMAIL = 'scire.ben@gmail.com'  # single admin (adjust if needed)
