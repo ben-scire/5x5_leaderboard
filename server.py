@@ -1,4 +1,5 @@
 """Ultra-minimal Thursday-only leaderboard server (fully cleaned version)."""
+"""Ultra-minimal Thursday-only leaderboard server (fully cleaned version)."""
 from flask import Flask, jsonify, send_from_directory, request
 import time, os, json, pathlib
 
@@ -301,6 +302,26 @@ def _load_saturday_lock_status():
     return { 'locked': False }
 
 SATURDAY_PICKS = _load_saturday()
+
+# --- Hot reload support (mtime-based) for Saturday picks ---
+_SATURDAY_FILE_MTIME = SATURDAY_FILE.stat().st_mtime if SATURDAY_FILE.exists() else None
+
+def _maybe_reload_saturday():
+    global SATURDAY_PICKS, _SATURDAY_FILE_MTIME
+    try:
+        if not SATURDAY_FILE.exists():
+            return False
+        mtime = SATURDAY_FILE.stat().st_mtime
+        if _SATURDAY_FILE_MTIME is None or mtime > _SATURDAY_FILE_MTIME:
+            data = _load_saturday()
+            if isinstance(data, dict) and data != SATURDAY_PICKS:
+                SATURDAY_PICKS = data
+            _SATURDAY_FILE_MTIME = mtime
+            _refresh_all_users()
+            return True
+    except Exception:
+        pass
+    return False
 
 # ---- Per-game locking (Saturday) ----
 # New granular locking replaces the prior whole-day locking workflow for Saturday.
@@ -925,6 +946,7 @@ def saturday_submit():
 
 @app.route('/api/picks/saturday/status')
 def saturday_status():
+    _maybe_reload_saturday()
     _refresh_all_users()
     submitted = sorted(SATURDAY_PICKS.keys())
     missing = [u for u in ALL_USERS if u not in SATURDAY_PICKS]
@@ -976,6 +998,7 @@ def saturday_lock_status():
 
 @app.route('/api/picks/saturday/all')
 def saturday_all():
+    _maybe_reload_saturday()
     counts = [ {} for _ in range(len(SATURDAY_LABELS)) ]
     for email, picks in SATURDAY_PICKS.items():
         for i, val in enumerate(picks):
@@ -1084,6 +1107,26 @@ def _parse_iso_utc_sun(ts: str):
 
 SUNDAY_PICKS = _load_sunday()
 
+# --- Hot reload support (mtime-based) for Sunday picks ---
+_SUNDAY_FILE_MTIME = SUNDAY_FILE.stat().st_mtime if SUNDAY_FILE.exists() else None
+
+def _maybe_reload_sunday():
+    global SUNDAY_PICKS, _SUNDAY_FILE_MTIME
+    try:
+        if not SUNDAY_FILE.exists():
+            return False
+        mtime = SUNDAY_FILE.stat().st_mtime
+        if _SUNDAY_FILE_MTIME is None or mtime > _SUNDAY_FILE_MTIME:
+            data = _load_sunday()
+            if isinstance(data, dict) and data != SUNDAY_PICKS:
+                SUNDAY_PICKS = data
+            _SUNDAY_FILE_MTIME = mtime
+            _refresh_all_users()
+            return True
+    except Exception:
+        pass
+    return False
+
 # Per-game locks Sunday (same semantics as Saturday)
 SUNDAY_GAME_LOCKS_FILE = pathlib.Path('data/picks/sunday_game_locks.json')
 
@@ -1169,6 +1212,7 @@ def sunday_submit():
 
 @app.route('/api/picks/sunday/status')
 def sunday_status():
+    _maybe_reload_sunday()
     _refresh_all_users()
     submitted = sorted(SUNDAY_PICKS.keys())
     missing = [u for u in ALL_USERS if u not in SUNDAY_PICKS]
@@ -1176,6 +1220,7 @@ def sunday_status():
 
 @app.route('/api/picks/sunday/all')
 def sunday_all():
+    _maybe_reload_sunday()
     counts = [ {} for _ in range(len(SUNDAY_LABELS)) ]
     for email, picks in SUNDAY_PICKS.items():
         for i,val in enumerate(picks):
