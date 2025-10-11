@@ -2,10 +2,12 @@
 from flask import Flask, jsonify, send_from_directory, request
 import time, os, json, pathlib
 
-VERSION = 'minimal-thu-11'
+VERSION = 'minimal-thu-12'
 
 # Final outcomes for the single Thursday game
-RESULTS = ['NYG', 'OVER', 'YES']  # spread winner, total, prop
+RESULTS = ['NYG', 'OVER', 'YES']  # Thursday: spread winner, total, prop
+# Friday final winners (spread picks): index aligned with FRIDAY_LABELS
+FRIDAY_RESULTS = ['USF', 'WASH']
 
 # Hard-coded authoritative picks (email -> list[str]); may be overridden by file
 HARD_PICKS = {
@@ -26,7 +28,7 @@ HARD_PICKS = {
     "amacdonald171@gmail.com": ["PHI", "OVER", "YES"],
     "jlindsey3428@gmail.com": ["NYG", "OVER", "YES"],
     "wyaggy3@gmail.com": ["PHI", "UNDER", "YES"]
-}
+} 
 
 DATA_OVERRIDE_PATH = pathlib.Path('data/picks/thursday_picks.json')
 
@@ -54,7 +56,7 @@ else:
     SOURCE = 'embedded'
 
 ALL_USERS = sorted(HARD_PICKS.keys())
-TOTAL_POSSIBLE = len(RESULTS)
+TOTAL_POSSIBLE = len(RESULTS) + len(FRIDAY_RESULTS)
 
 app = Flask(__name__, static_folder='.', static_url_path='')
 
@@ -446,18 +448,34 @@ def friday_log_latest():
         return jsonify({ 'ok': False, 'error': 'log_tail_failed', 'detail': str(e) }), 500
 
 def compute_scores():
-    """Return sorted list of scoreboard entries for all users."""
+    """Return sorted list of scoreboard entries for all users (Thu + Fri)."""
     entries = []
     for email in ALL_USERS:
-        picks = HARD_PICKS[email]
-        answered = sum(1 for p in picks if p)
-        score = sum(1 for a, b in zip(picks, RESULTS) if a == b)
+        # Thursday
+        thu_picks = HARD_PICKS[email]
+        thu_answered = sum(1 for p in thu_picks if p)
+        thu_score = sum(1 for a, b in zip(thu_picks, RESULTS) if a == b)
+
+        # Friday (may be absent if user hasn't submitted)
+        fri_picks = FRIDAY_PICKS.get(email, [])
+        fri_answered = sum(1 for p in fri_picks if p)
+        fri_score = 0
+        for a, b in zip(fri_picks, FRIDAY_RESULTS):
+            if a == b:
+                fri_score += 1
+
+        total_score = thu_score + fri_score
+        total_answered = thu_answered + fri_answered
+
         entries.append({
             'email': email,
-            'score': score,
-            'answered': answered,
+            'score': total_score,
+            'answered': total_answered,
             'totalPossible': TOTAL_POSSIBLE,
-            'perDay': { 'Thu': { 'score': score, 'answered': answered } }
+            'perDay': {
+                'Thu': { 'score': thu_score, 'answered': thu_answered },
+                'Fri': { 'score': fri_score, 'answered': fri_answered }
+            }
         })
     entries.sort(key=lambda r: (-r['score'], r['answered'], r['email']))
     return entries
@@ -467,7 +485,7 @@ def api_leaderboard():
     entries = compute_scores()
     return jsonify({
         'ok': True,
-        'dayOrder': ['Thu'],
+        'dayOrder': ['Thu','Fri'],
         'totalPossible': TOTAL_POSSIBLE,
         'entries': entries,
         'generated': int(time.time()*1000)

@@ -86,6 +86,15 @@
 
   ['Thu','Fri','Sat','Sun','Mon'].forEach(applyDay);
 
+    // Seed finalized Friday winners (static directive) so frontend scoring updates immediately.
+    try {
+      if(Array.isArray(picksLabels['Fri']) && picksLabels['Fri'].length >= 2){
+        if(!Array.isArray(coveredPicks['Fri'])) coveredPicks['Fri'] = [];
+        coveredPicks['Fri'][0] = 'USF';
+        coveredPicks['Fri'][1] = 'WASH';
+      }
+    } catch(_e) {}
+
     // If Friday picks labels came through but fridayGames ended empty (unexpected), rebuild from FRIDAY_SCHEDULE snapshot in payload.
     if((!Array.isArray(window.fridayGames) || !window.fridayGames.length) && days['Fri'] && Array.isArray(days['Fri'].games)){
       window.fridayGames = (days['Fri'].games||[]).map(g=>({
