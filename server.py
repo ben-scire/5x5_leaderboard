@@ -2,7 +2,7 @@
 from flask import Flask, jsonify, send_from_directory, request
 import time, os, json, pathlib
 
-VERSION = 'week-multi-2'
+VERSION = 'week-multi-3'
 
 # Final outcomes for the single Thursday game
 RESULTS = ['NYG', 'OVER', 'YES']  # Thursday: spread winner, total, prop
@@ -10,6 +10,8 @@ RESULTS = ['NYG', 'OVER', 'YES']  # Thursday: spread winner, total, prop
 FRIDAY_RESULTS = ['USF', 'WASH']
 # Saturday results placeholder (filled when games final). Length = 6 games
 SATURDAY_RESULTS = [None]*6
+# Sunday results placeholder (8 games)
+SUNDAY_RESULTS = [None]*8
 
 # Authoritative Thursday picks now fully external in data/picks/thursday_picks.json (no embedded fallback)
 DATA_OVERRIDE_PATH = pathlib.Path('data/picks/thursday_picks.json')
@@ -61,6 +63,8 @@ def _aggregate_all_users():
         base.update(FRIDAY_PICKS.keys())
     if 'SATURDAY_PICKS' in globals():
         base.update(SATURDAY_PICKS.keys())
+    if 'SUNDAY_PICKS' in globals():
+        base.update(SUNDAY_PICKS.keys())
     return sorted(base)
 
 ALL_USERS = _aggregate_all_users()
@@ -141,7 +145,7 @@ PIN_MAP = { k:v for k,v in PIN_MAP.items() if k in ALLOWED_EMAILS }
 
 def _check_pin(email: str, pin: str):
     return PIN_MAP.get(email.lower()) == pin
-TOTAL_POSSIBLE = len(RESULTS) + len(FRIDAY_RESULTS) + len(SATURDAY_RESULTS)
+TOTAL_POSSIBLE = len(RESULTS) + len(FRIDAY_RESULTS) + len(SATURDAY_RESULTS) + len(SUNDAY_RESULTS)
 
 app = Flask(__name__, static_folder='.', static_url_path='')
 
@@ -297,6 +301,81 @@ def _load_saturday_lock_status():
     return { 'locked': False }
 
 SATURDAY_PICKS = _load_saturday()
+
+# ---- Per-game locking (Saturday) ----
+# New granular locking replaces the prior whole-day locking workflow for Saturday.
+# A game is considered locked if either (a) it has been manually locked by the admin
+# or (b) the current time is past (>=) the scheduled kickoff time. Manual unlocks
+# cannot override kickoff-based automatic locks.
+SATURDAY_GAME_LOCKS_FILE = pathlib.Path('data/picks/saturday_game_locks.json')
+
+def _load_saturday_game_locks():
+    if SATURDAY_GAME_LOCKS_FILE.exists():
+        try:
+            with SATURDAY_GAME_LOCKS_FILE.open('r', encoding='utf-8') as f:
+                data = json.load(f)
+            if isinstance(data, dict):
+                return data.get('manualLocks', {}) if isinstance(data.get('manualLocks', {}), dict) else {}
+        except Exception:
+            return {}
+    return {}
+
+def _save_saturday_game_locks(locks: dict):
+    try:
+        SATURDAY_GAME_LOCKS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        payload = { 'manualLocks': locks, 'updated': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()) }
+        with SATURDAY_GAME_LOCKS_FILE.open('w', encoding='utf-8') as f:
+            json.dump(payload, f, indent=2)
+        return True
+    except Exception:
+        return False
+
+def _parse_iso_utc(ts: str):
+    if not ts or not isinstance(ts, str):
+        return None
+    # Accept forms like 2025-10-11T16:00:00Z
+    try:
+        if ts.endswith('Z'):
+            ts = ts[:-1]
+        # Basic split
+        date_part, time_part = ts.split('T')
+        y,m,d = [int(x) for x in date_part.split('-')]
+        hh,mm,ss = [int(x) for x in time_part.split(':')]
+        import calendar
+        return calendar.timegm((y,m,d,hh,mm,ss,0,0,0))
+    except Exception:
+        return None
+
+_SATURDAY_MANUAL_LOCKS = _load_saturday_game_locks()  # keys are str(indices) -> bool
+
+def _is_saturday_game_locked(index: int):
+    # Manual lock check
+    if str(index) in _SATURDAY_MANUAL_LOCKS and _SATURDAY_MANUAL_LOCKS[str(index)]:
+        return True
+    # Kickoff auto lock based on start time
+    if 0 <= index < len(SATURDAY_SCHEDULE):
+        start_iso = SATURDAY_SCHEDULE[index].get('start')
+        start_epoch = _parse_iso_utc(start_iso)
+        if start_epoch is not None and time.time() >= start_epoch:
+            return True
+    return False
+
+def _saturday_effective_locks():
+    out = []
+    now_epoch = time.time()
+    for i, g in enumerate(SATURDAY_SCHEDULE):
+        start_iso = g.get('start')
+        start_epoch = _parse_iso_utc(start_iso)
+        started = (start_epoch is not None and now_epoch >= start_epoch)
+        manual = bool(_SATURDAY_MANUAL_LOCKS.get(str(i)))
+        out.append({
+            'index': i,
+            'manualLocked': manual,
+            'started': started,
+            'effectiveLocked': manual or started,
+            'start': start_iso
+        })
+    return out
 
 def _seed_friday_from_csv():
     """If Fri_Picks.csv exists, load it (email,pick1,pick2) into initial FRIDAY_PICKS before JSON overrides.
@@ -641,7 +720,7 @@ def friday_log_latest():
         return jsonify({ 'ok': False, 'error': 'log_tail_failed', 'detail': str(e) }), 500
 
 def compute_scores():
-    """Return sorted list of scoreboard entries for all users (Thu + Fri + Sat)."""
+    """Return sorted list of scoreboard entries for all users (Thu + Fri + Sat + Sun)."""
     entries = []
     for email in ALL_USERS:
         # Thursday
@@ -665,8 +744,16 @@ def compute_scores():
             if b and a == b:
                 sat_score += 1
 
-        total_score = thu_score + fri_score + sat_score
-        total_answered = thu_answered + fri_answered + sat_answered
+        # Sunday
+        sun_picks = SUNDAY_PICKS.get(email, []) if 'SUNDAY_PICKS' in globals() else []
+        sun_answered = sum(1 for p in sun_picks if p)
+        sun_score = 0
+        for a, b in zip(sun_picks, SUNDAY_RESULTS):
+            if b and a == b:
+                sun_score += 1
+
+        total_score = thu_score + fri_score + sat_score + sun_score
+        total_answered = thu_answered + fri_answered + sat_answered + sun_answered
 
         entries.append({
             'email': email,
@@ -676,7 +763,8 @@ def compute_scores():
             'perDay': {
                 'Thu': { 'score': thu_score, 'answered': thu_answered },
                 'Fri': { 'score': fri_score, 'answered': fri_answered },
-                'Sat': { 'score': sat_score, 'answered': sat_answered }
+                'Sat': { 'score': sat_score, 'answered': sat_answered },
+                'Sun': { 'score': sun_score, 'answered': sun_answered }
             }
         })
     entries.sort(key=lambda r: (-r['score'], r['answered'], r['email']))
@@ -687,7 +775,7 @@ def api_leaderboard():
     entries = compute_scores()
     return jsonify({
         'ok': True,
-        'dayOrder': ['Thu','Fri','Sat'],
+        'dayOrder': ['Thu','Fri','Sat','Sun'],
         'totalPossible': TOTAL_POSSIBLE,
         'entries': entries,
         'generated': int(time.time()*1000)
@@ -778,6 +866,10 @@ def api_schedule():
         'Sat': {
             'games': SATURDAY_SCHEDULE,
             'picks': [ { 'label': lbl } for lbl in SATURDAY_LABELS ]
+        },
+        'Sun': {
+            'games': SUNDAY_SCHEDULE,
+            'picks': [ { 'label': lbl } for lbl in SUNDAY_LABELS ]
         }
     }
     return jsonify({ 'ok': True, 'version': VERSION, 'days': days })
@@ -799,8 +891,10 @@ def saturday_submit():
     email = (payload.get('email') or '').strip().lower()
     picks = payload.get('picks') or []
     pin = str(payload.get('pin') or '').strip()
+    # Day-level locking retained for backwards compatibility, but granular game
+    # locks supersede it. If whole-day lock file exists, reject entire submission.
     if _is_saturday_locked():
-        return jsonify({ 'ok': False, 'error': 'locked' }), 403
+        return jsonify({ 'ok': False, 'error': 'day_locked' }), 403
     if not email:
         return jsonify({ 'ok': False, 'error': 'email_required' }), 400
     if not isinstance(picks, list):
@@ -814,19 +908,27 @@ def saturday_submit():
         return jsonify({ 'ok': False, 'error': 'unauthorized_email' }), 403
     if not _check_pin(email, pin):
         return jsonify({ 'ok': False, 'error': 'invalid_pin' }), 403
-    norm = [str(p or '').strip().upper() for p in picks]
-    SATURDAY_PICKS[email] = norm
+    # Preserve existing picks for any game already locked; update only unlocked indices.
+    existing = SATURDAY_PICKS.get(email, [''] * len(SATURDAY_LABELS))
+    updated = []
+    for idx, val in enumerate(picks):
+        if _is_saturday_game_locked(idx):
+            # Keep prior value (cannot modify locked game)
+            updated.append(existing[idx] if idx < len(existing) else '')
+        else:
+            updated.append(str(val or '').strip().upper())
+    SATURDAY_PICKS[email] = updated
     if not _save_saturday(SATURDAY_PICKS):
         return jsonify({ 'ok': False, 'error': 'persist_failed' }), 500
-    _append_saturday_csv(email, norm)
-    return jsonify({ 'ok': True, 'saved': True })
+    _append_saturday_csv(email, SATURDAY_PICKS[email])
+    return jsonify({ 'ok': True, 'saved': True, 'lockedGames': [i for i in range(len(SATURDAY_LABELS)) if _is_saturday_game_locked(i)] })
 
 @app.route('/api/picks/saturday/status')
 def saturday_status():
     _refresh_all_users()
     submitted = sorted(SATURDAY_PICKS.keys())
     missing = [u for u in ALL_USERS if u not in SATURDAY_PICKS]
-    return jsonify({ 'ok': True, 'submitted': submitted, 'missing': missing, 'submittedCount': len(submitted), 'missingCount': len(missing), 'locked': _is_saturday_locked() })
+    return jsonify({ 'ok': True, 'submitted': submitted, 'missing': missing, 'submittedCount': len(submitted), 'missingCount': len(missing), 'locked': _is_saturday_locked(), 'gameLocks': _saturday_effective_locks() })
 
 @app.route('/api/picks/saturday/lock', methods=['POST'])
 def saturday_lock():
@@ -890,8 +992,290 @@ def saturday_all():
         'counts': counts,
         'locked': locked,
         'lockedSnapshot': lockedData.get('picks') if lockedData else None,
-        'lockedAt': lockedData.get('lockedAt') if lockedData else None
+        'lockedAt': lockedData.get('lockedAt') if lockedData else None,
+        'gameLocks': _saturday_effective_locks()
     })
+
+# --- New Saturday per-game lock endpoints ---
+ADMIN_EMAIL = 'scire.ben@gmail.com'  # single admin (adjust if needed)
+
+# ------------------ Sunday (new) ------------------
+SUNDAY_LABELS = [
+    'NFL: DEN -6.5 @ NYJ (pick team)',            # 9:30 AM ET (London style early game)
+    'NFL: CLE +6.5 @ PIT (pick team)',            # 1:00 PM ET
+    'NFL: LAC -3.5 @ MIA (pick team)',            # 1:00 PM ET
+    'NFL: NE -3.5 @ NO (pick team)',              # 1:00 PM ET
+    'NFL: LAR -7.5 @ BAL (pick team)',            # 1:00 PM ET
+    'NFL: SEA -1.5 @ JAX (pick team)',            # 1:00 PM ET
+    'NFL: SF +3.5 @ TB (pick team)',              # 4:25 PM ET
+    'NFL: DET +2.5 @ KC (pick team)'              # 8:20 PM ET
+]
+
+# Sunday schedule (home-based line: negative => home favored, positive => away favored)
+SUNDAY_SCHEDULE = [
+    { 'sport':'NFL', 'eventId': None, 'away':'Denver Broncos', 'awayAbbr':'DEN', 'home':'New York Jets', 'homeAbbr':'NYJ', 'lineHome': +6.5, 'total': None, 'start':'2025-10-12T13:30:00Z' },
+    { 'sport':'NFL', 'eventId': None, 'away':'Cleveland Browns', 'awayAbbr':'CLE', 'home':'Pittsburgh Steelers', 'homeAbbr':'PIT', 'lineHome': -6.5, 'total': None, 'start':'2025-10-12T17:00:00Z' },
+    { 'sport':'NFL', 'eventId': None, 'away':'Los Angeles Chargers', 'awayAbbr':'LAC', 'home':'Miami Dolphins', 'homeAbbr':'MIA', 'lineHome': +3.5, 'total': None, 'start':'2025-10-12T17:00:00Z' },
+    { 'sport':'NFL', 'eventId': None, 'away':'New England Patriots', 'awayAbbr':'NE', 'home':'New Orleans Saints', 'homeAbbr':'NO', 'lineHome': +3.5, 'total': None, 'start':'2025-10-12T17:00:00Z' },
+    { 'sport':'NFL', 'eventId': None, 'away':'Los Angeles Rams', 'awayAbbr':'LAR', 'home':'Baltimore Ravens', 'homeAbbr':'BAL', 'lineHome': -7.5, 'total': None, 'start':'2025-10-12T17:00:00Z' },
+    { 'sport':'NFL', 'eventId': None, 'away':'Seattle Seahawks', 'awayAbbr':'SEA', 'home':'Jacksonville Jaguars', 'homeAbbr':'JAX', 'lineHome': +1.5, 'total': None, 'start':'2025-10-12T17:00:00Z' },
+    { 'sport':'NFL', 'eventId': None, 'away':'San Francisco 49ers', 'awayAbbr':'SF', 'home':'Tampa Bay Buccaneers', 'homeAbbr':'TB', 'lineHome': -3.5, 'total': None, 'start':'2025-10-12T20:25:00Z' },
+    { 'sport':'NFL', 'eventId': None, 'away':'Detroit Lions', 'awayAbbr':'DET', 'home':'Kansas City Chiefs', 'homeAbbr':'KC', 'lineHome': -2.5, 'total': None, 'start':'2025-10-13T00:20:00Z' }
+]
+
+# Sunday storage
+SUNDAY_FILE = pathlib.Path('data/picks/sunday_picks.json')
+SUNDAY_CSV_LOG = pathlib.Path('data/picks/sunday_picks_log.csv')
+SUNDAY_LOCK_FILE = pathlib.Path('data/picks/sunday_locked.json')  # legacy day-level (not primary)
+SUNDAY_LOCK_STATUS = pathlib.Path('data/picks/sunday_lock_status.json')
+
+def _load_sunday():
+    if SUNDAY_FILE.exists():
+        try:
+            with SUNDAY_FILE.open('r', encoding='utf-8') as f:
+                data = json.load(f)
+            if isinstance(data, dict):
+                out = {}
+                for email, picks in data.items():
+                    if isinstance(picks, list):
+                        adj = picks[:len(SUNDAY_LABELS)]
+                        while len(adj) < len(SUNDAY_LABELS):
+                            adj.append('')
+                        out[email] = [p.strip().upper() for p in adj]
+                return out
+        except Exception:
+            return {}
+    return {}
+
+def _save_sunday(data: dict):
+    try:
+        SUNDAY_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with SUNDAY_FILE.open('w', encoding='utf-8') as f:
+            json.dump(data, f, indent=2)
+        return True
+    except Exception:
+        return False
+
+def _append_sunday_csv(email: str, picks: list):
+    try:
+        SUNDAY_CSV_LOG.parent.mkdir(parents=True, exist_ok=True)
+        is_new = not SUNDAY_CSV_LOG.exists()
+        with SUNDAY_CSV_LOG.open('a', encoding='utf-8') as f:
+            if is_new:
+                f.write('ts_iso,email,' + ','.join([f'pick{i+1}' for i in range(len(SUNDAY_LABELS))]) + '\n')
+            ts = time.strftime('%Y-%m-%dT%H:%M:%S', time.gmtime())
+            row = [ts, email] + picks
+            safe = [c.replace('\n',' ').replace('\r',' ').replace(',', ' ') for c in row]
+            f.write(','.join(safe) + '\n')
+    except Exception:
+        pass
+
+def _parse_iso_utc_sun(ts: str):
+    try:
+        if not ts: return None
+        if ts.endswith('Z'): ts = ts[:-1]
+        date_part, time_part = ts.split('T')
+        y,m,d = [int(x) for x in date_part.split('-')]
+        hh,mm,ss = [int(x) for x in time_part.split(':')]
+        import calendar
+        return calendar.timegm((y,m,d,hh,mm,ss,0,0,0))
+    except Exception:
+        return None
+
+SUNDAY_PICKS = _load_sunday()
+
+# Per-game locks Sunday (same semantics as Saturday)
+SUNDAY_GAME_LOCKS_FILE = pathlib.Path('data/picks/sunday_game_locks.json')
+
+def _load_sunday_game_locks():
+    if SUNDAY_GAME_LOCKS_FILE.exists():
+        try:
+            with SUNDAY_GAME_LOCKS_FILE.open('r', encoding='utf-8') as f:
+                data = json.load(f)
+            if isinstance(data, dict):
+                return data.get('manualLocks', {}) if isinstance(data.get('manualLocks', {}), dict) else {}
+        except Exception:
+            return {}
+    return {}
+
+def _save_sunday_game_locks(locks: dict):
+    try:
+        SUNDAY_GAME_LOCKS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with SUNDAY_GAME_LOCKS_FILE.open('w', encoding='utf-8') as f:
+            json.dump({ 'manualLocks': locks, 'updated': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()) }, f, indent=2)
+        return True
+    except Exception:
+        return False
+
+_SUNDAY_MANUAL_LOCKS = _load_sunday_game_locks()
+
+def _is_sunday_game_locked(index: int):
+    if str(index) in _SUNDAY_MANUAL_LOCKS and _SUNDAY_MANUAL_LOCKS[str(index)]:
+        return True
+    if 0 <= index < len(SUNDAY_SCHEDULE):
+        start_iso = SUNDAY_SCHEDULE[index].get('start')
+        start_epoch = _parse_iso_utc_sun(start_iso)
+        if start_epoch is not None and time.time() >= start_epoch:
+            return True
+    return False
+
+def _sunday_effective_locks():
+    out=[]; now_epoch=time.time()
+    for i,g in enumerate(SUNDAY_SCHEDULE):
+        start_iso = g.get('start'); start_epoch=_parse_iso_utc_sun(start_iso); started = (start_epoch is not None and now_epoch >= start_epoch)
+        manual = bool(_SUNDAY_MANUAL_LOCKS.get(str(i)))
+        out.append({ 'index': i, 'manualLocked': manual, 'started': started, 'effectiveLocked': manual or started, 'start': start_iso })
+    return out
+
+# Sunday endpoints
+@app.route('/api/picks/sunday/labels')
+def sunday_labels():
+    return jsonify({ 'ok': True, 'labels': SUNDAY_LABELS })
+
+@app.route('/api/picks/sunday/get')
+def sunday_get():
+    email = (request.args.get('email') or '').strip().lower()
+    return jsonify({ 'ok': True, 'email': email, 'picks': SUNDAY_PICKS.get(email) })
+
+@app.route('/api/picks/sunday/submit', methods=['POST'])
+def sunday_submit():
+    payload = request.get_json(force=True, silent=True) or {}
+    email = (payload.get('email') or '').strip().lower()
+    picks = payload.get('picks') or []
+    pin = str(payload.get('pin') or '').strip()
+    if not email:
+        return jsonify({ 'ok': False, 'error': 'email_required' }), 400
+    if email not in ALLOWED_EMAILS:
+        return jsonify({ 'ok': False, 'error': 'unauthorized_email' }), 403
+    if not _check_pin(email, pin):
+        return jsonify({ 'ok': False, 'error': 'invalid_pin' }), 403
+    if not isinstance(picks, list):
+        return jsonify({ 'ok': False, 'error': 'invalid_picks_type' }), 400
+    # Allow partial submissions; pad/truncate
+    if len(picks) > len(SUNDAY_LABELS): picks = picks[:len(SUNDAY_LABELS)]
+    if len(picks) < len(SUNDAY_LABELS): picks = picks + ['']*(len(SUNDAY_LABELS)-len(picks))
+    existing = SUNDAY_PICKS.get(email, ['']*len(SUNDAY_LABELS))
+    updated=[]
+    for idx,val in enumerate(picks):
+        if _is_sunday_game_locked(idx):
+            updated.append(existing[idx] if idx < len(existing) else '')
+        else:
+            updated.append(str(val or '').strip().upper())
+    SUNDAY_PICKS[email] = updated
+    if not _save_sunday(SUNDAY_PICKS):
+        return jsonify({ 'ok': False, 'error': 'persist_failed' }), 500
+    _append_sunday_csv(email, updated)
+    return jsonify({ 'ok': True, 'saved': True, 'lockedGames': [i for i in range(len(SUNDAY_LABELS)) if _is_sunday_game_locked(i)] })
+
+@app.route('/api/picks/sunday/status')
+def sunday_status():
+    _refresh_all_users()
+    submitted = sorted(SUNDAY_PICKS.keys())
+    missing = [u for u in ALL_USERS if u not in SUNDAY_PICKS]
+    return jsonify({ 'ok': True, 'submitted': submitted, 'missing': missing, 'submittedCount': len(submitted), 'missingCount': len(missing), 'gameLocks': _sunday_effective_locks() })
+
+@app.route('/api/picks/sunday/all')
+def sunday_all():
+    counts = [ {} for _ in range(len(SUNDAY_LABELS)) ]
+    for email, picks in SUNDAY_PICKS.items():
+        for i,val in enumerate(picks):
+            if not val: continue
+            d = counts[i]; d[val] = d.get(val,0)+1
+    return jsonify({ 'ok': True, 'labels': SUNDAY_LABELS, 'totalSubmissions': len(SUNDAY_PICKS), 'picks': SUNDAY_PICKS, 'counts': counts, 'gameLocks': _sunday_effective_locks() })
+
+def _admin_auth_sunday(payload):
+    email = (payload.get('email') or '').strip().lower()
+    pin = str(payload.get('pin') or '').strip()
+    if email != ADMIN_EMAIL: return False, 'not_admin'
+    if not _check_pin(email, pin): return False, 'invalid_pin'
+    return True, email
+
+@app.route('/api/picks/sunday/game_locks')
+def sunday_game_locks():
+    return jsonify({ 'ok': True, 'locks': _sunday_effective_locks() })
+
+@app.route('/api/picks/sunday/lock_game', methods=['POST'])
+def sunday_lock_game():
+    payload = request.get_json(force=True, silent=True) or {}
+    ok, err = _admin_auth_sunday(payload)
+    if not ok: return jsonify({ 'ok': False, 'error': err }), 403
+    try: idx = int(payload.get('index'))
+    except Exception: return jsonify({ 'ok': False, 'error': 'invalid_index' }), 400
+    if idx < 0 or idx >= len(SUNDAY_LABELS): return jsonify({ 'ok': False, 'error': 'out_of_range' }), 400
+    _SUNDAY_MANUAL_LOCKS[str(idx)] = True
+    if not _save_sunday_game_locks(_SUNDAY_MANUAL_LOCKS):
+        return jsonify({ 'ok': False, 'error': 'persist_failed' }), 500
+    return jsonify({ 'ok': True, 'locks': _sunday_effective_locks() })
+
+@app.route('/api/picks/sunday/unlock_game', methods=['POST'])
+def sunday_unlock_game():
+    payload = request.get_json(force=True, silent=True) or {}
+    ok, err = _admin_auth_sunday(payload)
+    if not ok: return jsonify({ 'ok': False, 'error': err }), 403
+    try: idx = int(payload.get('index'))
+    except Exception: return jsonify({ 'ok': False, 'error': 'invalid_index' }), 400
+    if idx < 0 or idx >= len(SUNDAY_LABELS): return jsonify({ 'ok': False, 'error': 'out_of_range' }), 400
+    if _is_sunday_game_locked(idx) and not _SUNDAY_MANUAL_LOCKS.get(str(idx)):
+        return jsonify({ 'ok': False, 'error': 'started_auto_lock' }), 409
+    _SUNDAY_MANUAL_LOCKS[str(idx)] = False
+    if str(idx) in _SUNDAY_MANUAL_LOCKS and not _SUNDAY_MANUAL_LOCKS[str(idx)]:
+        _SUNDAY_MANUAL_LOCKS.pop(str(idx), None)
+    if not _save_sunday_game_locks(_SUNDAY_MANUAL_LOCKS):
+        return jsonify({ 'ok': False, 'error': 'persist_failed' }), 500
+    return jsonify({ 'ok': True, 'locks': _sunday_effective_locks() })
+
+def _admin_auth(payload):
+    email = (payload.get('email') or '').strip().lower()
+    pin = str(payload.get('pin') or '').strip()
+    if email != ADMIN_EMAIL:
+        return False, 'not_admin'
+    if not _check_pin(email, pin):
+        return False, 'invalid_pin'
+    return True, email
+
+@app.route('/api/picks/saturday/game_locks')
+def saturday_game_locks():
+    return jsonify({ 'ok': True, 'locks': _saturday_effective_locks() })
+
+@app.route('/api/picks/saturday/lock_game', methods=['POST'])
+def saturday_lock_game():
+    payload = request.get_json(force=True, silent=True) or {}
+    ok, err = _admin_auth(payload)
+    if not ok:
+        return jsonify({ 'ok': False, 'error': err }), 403
+    try:
+        idx = int(payload.get('index'))
+    except Exception:
+        return jsonify({ 'ok': False, 'error': 'invalid_index' }), 400
+    if idx < 0 or idx >= len(SATURDAY_LABELS):
+        return jsonify({ 'ok': False, 'error': 'out_of_range' }), 400
+    _SATURDAY_MANUAL_LOCKS[str(idx)] = True
+    if not _save_saturday_game_locks(_SATURDAY_MANUAL_LOCKS):
+        return jsonify({ 'ok': False, 'error': 'persist_failed' }), 500
+    return jsonify({ 'ok': True, 'locks': _saturday_effective_locks() })
+
+@app.route('/api/picks/saturday/unlock_game', methods=['POST'])
+def saturday_unlock_game():
+    payload = request.get_json(force=True, silent=True) or {}
+    ok, err = _admin_auth(payload)
+    if not ok:
+        return jsonify({ 'ok': False, 'error': err }), 403
+    try:
+        idx = int(payload.get('index'))
+    except Exception:
+        return jsonify({ 'ok': False, 'error': 'invalid_index' }), 400
+    if idx < 0 or idx >= len(SATURDAY_LABELS):
+        return jsonify({ 'ok': False, 'error': 'out_of_range' }), 400
+    # Cannot unlock after kickoff (auto lock)
+    if _is_saturday_game_locked(idx) and not _SATURDAY_MANUAL_LOCKS.get(str(idx)):
+        return jsonify({ 'ok': False, 'error': 'started_auto_lock' }), 409
+    _SATURDAY_MANUAL_LOCKS[str(idx)] = False
+    # Remove key if False to keep file lean
+    if str(idx) in _SATURDAY_MANUAL_LOCKS and not _SATURDAY_MANUAL_LOCKS[str(idx)]:
+        _SATURDAY_MANUAL_LOCKS.pop(str(idx), None)
+    if not _save_saturday_game_locks(_SATURDAY_MANUAL_LOCKS):
+        return jsonify({ 'ok': False, 'error': 'persist_failed' }), 500
+    return jsonify({ 'ok': True, 'locks': _saturday_effective_locks() })
 
 @app.route('/')
 def root():

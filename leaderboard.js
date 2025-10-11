@@ -351,10 +351,10 @@ function updateLeaderboard(){
     u.thurs = thursActual[i];
     u.fri   = friActual[i];
     // Hide Saturday contribution for now so leaderboard doesn't leak count of correct picks yet.
-    u.sat   = 0; // satActual[i];
-    u.sun   = sunActual[i];
+  u.sat   = 0; // hidden until revealSaturday()
+  u.sun   = 0; // hide Sunday points until revealSunday()
     u.mon   = monActual[i];
-  u.total = thursActual[i] + friActual[i] /* + satActual[i] */ + sunActual[i] + monActual[i];
+  u.total = thursActual[i] + friActual[i] /* + satActual[i] + sunActual[i] */ + monActual[i];
     delete u._thursProj; delete u._friProj; delete u._satProj; delete u._sunProj; delete u._monProj; delete u._projTotal;
   });
 
@@ -375,7 +375,7 @@ function updateLeaderboard(){
       Thu: thursVals[i],
       Fri: friVals[i],
       Sat: satVals[i],
-      Sun: sunVals[i],
+  Sun: sunVals[i],
       Mon: monVals[i],
       Total: thursVals[i] + friVals[i] + satVals[i] + sunVals[i] + monVals[i],
   Mode: 'Actual'
@@ -448,6 +448,21 @@ window.revealSaturday = function(){
     if(picksDay==='Sat') renderPicksTable('Sat');
     console.log('[Reveal] Saturday picks and points revealed.');
   } catch(e){ console.warn('Reveal Saturday failed', e); }
+};
+
+// Admin helper: reveal Sunday picks & scoring
+window.revealSunday = function(){
+  try {
+    users.forEach(u=>{ u.sun = (userPicks['Sun'] && userPicks['Sun'][u.username]) ? 0 : 0; });
+    users.forEach(u=>{ u.sun = (function pointsForDay(day,user){
+      const picks = (userPicks[day] && userPicks[day][user.username]) || [];
+      const covers = coveredPicks[day] || [];
+      let pts=0; covers.forEach((c,i)=>{ if(!c || c==='PUSH') return; const pick=picks[i]; if(pick && picksMatch(pick,c)) pts++; }); return pts; })('Sun', u); });
+    users.forEach(u=>{ u.total = (u.thurs||0)+(u.fri||0)+(u.sat||0)+(u.sun||0)+(u.mon||0); });
+    updateLeaderboard();
+    if(picksDay==='Sun') renderPicksTable('Sun');
+    console.log('[Reveal] Sunday picks and points revealed.');
+  } catch(e){ console.warn('Reveal Sunday failed', e); }
 };
 
 /* ============= Table Renders ============= */
@@ -556,6 +571,12 @@ function renderPicksTable(day=picksDay){
     const rows = users.map(u=> `<tr><td>${abbrevUser(u)}</td><td style="text-align:center;opacity:0.65;">Hidden</td></tr>`).join('');
     tbl.innerHTML = '<tr><th class="th-small">Player</th><th class="th-small">Saturday Picks</th></tr>' +
       '<tr><td colspan="2" style="text-align:center;padding:6px 10px;font-size:12px;color:#9fb2bf;">Saturday picks are hidden until results are posted.</td></tr>' + rows;
+    return;
+  }
+  if(day==='Sun'){
+    const rows = users.map(u=> `<tr><td>${abbrevUser(u)}</td><td style="text-align:center;opacity:0.65;">Hidden</td></tr>`).join('');
+    tbl.innerHTML = '<tr><th class="th-small">Player</th><th class="th-small">Sunday Picks</th></tr>' +
+      '<tr><td colspan="2" style="text-align:center;padding:6px 10px;font-size:12px;color:#9fb2bf;">Sunday picks are hidden until results are posted.</td></tr>' + rows;
     return;
   }
   let labelCount = (picksLabels[day]||[]).length;
@@ -915,11 +936,13 @@ window.addEventListener('load', async () => {
   const now = new Date();
   const dow = now.getDay(); // 0=Sun, 1=Mon
   // Original selection logic restored so users land on relevant active day.
+  // Automatic day-of-week selection (0=Sun..6=Sat)
   let initialDay = 'Sat';
   if(dow===0) initialDay='Sun';
   else if(dow===1) initialDay='Mon';
-  else if(dow===5) initialDay='Fri';
   else if(dow===4) initialDay='Thu';
+  else if(dow===5) initialDay='Fri';
+  else if(dow===6) initialDay='Sat'; // explicit for clarity
   // Normalize any legacy 'Thurs' keys to 'Thu' before initial calculations
   if(window.picksLabels && window.picksLabels.Thurs && !window.picksLabels.Thu){ window.picksLabels.Thu = window.picksLabels.Thurs; }
   if(window.userPicks && window.userPicks.Thurs && !window.userPicks.Thu){ window.userPicks.Thu = window.userPicks.Thurs; }

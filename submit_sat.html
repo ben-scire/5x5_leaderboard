@@ -17,7 +17,8 @@
     button.mc:hover{background:#2d4660;}
     button.mc.selected{background:#00897b;border-color:#00bfa5;box-shadow:0 0 0 2px rgba(0,191,165,0.25);} 
     button.mc.selected::after{content:'\2713';position:absolute;top:-6px;right:-6px;background:#00bfa5;color:#062a27;font-size:12px;width:20px;height:20px;display:flex;align-items:center;justify-content:center;border-radius:50%;box-shadow:0 2px 4px -2px #000;}
-    .match{background:#152027;padding:12px 14px;border:1px solid #22323e;border-radius:10px;}
+  .match{background:#152027;padding:12px 14px;border:1px solid #22323e;border-radius:10px;}
+  .kickoff-badge{display:inline-block;margin-left:8px;background:#273643;color:#90caf9;font-size:11px;padding:2px 6px;border-radius:12px;font-weight:500;letter-spacing:.5px;}
     .btnrow{display:flex;gap:10px;flex-wrap:wrap;}
     #status{font-size:12px;margin-left:12px;color:#90caf9;} 
     .note{font-size:12px;color:#888;margin-top:6px;} 
@@ -39,11 +40,15 @@
     <div class="row" style="margin-top:18px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
       <button id="loadBtn" type="button">Load Existing</button>
       <button id="saveBtn" type="button">Save Picks</button>
-  <button id="lockBtn" type="button" style="background:#8e24aa;">Lock (Admin)</button>
-  <button id="unlockBtn" type="button" style="background:#c62828;">Unlock (Admin)</button>
+      <button id="adminBtn" type="button" style="background:#8e24aa;">Admin</button>
       <span id="status"></span>
     </div>
-    <div class="note">Locking is manual for now. Live scoring not yet wired (results placeholder).</div>
+    <div class="note">Games lock automatically at kickoff or via admin. You can edit unlocked games freely; locked games ignore changes.</div>
+    <div id="adminPanel" style="display:none;margin-top:14px;padding:12px 14px;border:1px solid #324352;background:#162028;border-radius:8px;">
+      <div style="font-size:13px;font-weight:600;margin-bottom:8px;display:flex;align-items:center;gap:10px;">Saturday Game Locks <button id="closeAdmin" type="button" style="background:#233345;border:1px solid #35526b;color:#9cc4ff;font-size:11px;padding:4px 8px;border-radius:4px;">Close</button></div>
+      <div id="gameLocks" style="font-size:12px;display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;"></div>
+      <div style="margin-top:10px;font-size:11px;color:#b0bec5;">Manual lock adds a lock before kickoff; manual unlock only valid before kickoff. After kickoff, auto-lock cannot be removed.</div>
+    </div>
     <div style="margin-top:22px;">
       <div style="font-size:13px;font-weight:600;margin-bottom:6px;color:#9cc4ff;display:flex;align-items:center;gap:10px;">Saturday Submission Status <button id="refreshStatus" type="button" style="background:#233345;border:1px solid #35526b;color:#9cc4ff;font-size:12px;padding:6px 10px;border-radius:6px;cursor:pointer;">Refresh</button></div>
       <div id="satStatus" style="font-size:12px;line-height:1.5;background:#152027;border:1px solid #22323e;padding:10px 12px;border-radius:8px;max-height:240px;overflow:auto;"></div>
@@ -51,6 +56,7 @@
   </div>
   <p style="margin-top:28px;"><a href="leaderboard.html" style="color:#64b5f6;">Back to Leaderboard</a></p>
 <script>
+// Base labels (static text); kickoff times fetched from /api/schedule then appended visually
 const LABELS = [
   'NCAAF: Ohio St -15.5 @ Illinois (pick team)',
   'NCAAF: Alabama -3.5 @ Missouri (pick team)',
@@ -59,6 +65,7 @@ const LABELS = [
   'NCAAF: Georgia -4.5 @ Auburn (pick team)',
   'NCAAF: BYU -2.5 @ Arizona (pick team)'
 ];
+let START_TIMES = []; // ISO kickoff times
 // Extract two team tokens from label. Fallback to manual split on '@'.
 function parseTeams(label){
   // Pattern: Prefix: TeamA +/-X.X @ TeamB
@@ -92,12 +99,21 @@ function abbrize(name){
     .replace(/Arizona$/i,'ARIZ')
     .replace(/BYU/i,'BYU');
 }
+function fmtET(iso){
+  if(!iso) return '';
+  try {
+    const d = new Date(iso);
+    // Convert to America/New_York; fall back silently if TZ unsupported
+    return d.toLocaleTimeString([], { hour:'numeric', minute:'2-digit', hour12:true, timeZone:'America/New_York' }).replace(':00','') + ' ET';
+  } catch(e){ return ''; }
+}
 function render(){
   const host = document.getElementById('matchups');
   host.innerHTML = LABELS.map((lbl,i)=>{
     const teams = parseTeams(lbl);
     const btns = teams.map(t=> `<button type='button' class='mc' data-idx='${i}' data-val='${abbrize(t).toUpperCase()}'>${abbrize(t).toUpperCase()}</button>`).join('');
-    return `<div class='match'><div style='font-size:13px;font-weight:600;margin-bottom:6px;'>${lbl}</div><div class='btnrow' data-group='${i}'>${btns}</div><input type='hidden' data-idx='${i}' /></div>`;
+    const ko = fmtET(START_TIMES[i]);
+    return `<div class='match'><div style='font-size:13px;font-weight:600;margin-bottom:6px;'>${lbl}${ko?` <span class='kickoff-badge'>${ko}</span>`:''}</div><div class='btnrow' data-group='${i}'>${btns}</div><input type='hidden' data-idx='${i}' /></div>`;
   }).join('');
   host.querySelectorAll('button.mc').forEach(btn=>{
     btn.addEventListener('click', e=>{
@@ -109,6 +125,10 @@ function render(){
   });
 }
 render();
+// Load schedule to populate kickoff times then re-render with badges
+(async function loadKickoffs(){
+  try { const r = await fetch('/api/schedule'); if(!r.ok) return; const j = await r.json(); const sat = j.days && (j.days.Sat || j.days.sat || j.days.SAT); if(sat && Array.isArray(sat.games)){ START_TIMES = sat.games.map(g=> g.start || g.startTime || ''); render(); refreshGameLocks(); } } catch(e){}
+})();
 async function loadExisting(){
   const email = document.getElementById('email').value.trim().toLowerCase();
   const status = document.getElementById('status');
@@ -163,16 +183,75 @@ async function loadStatus(){
 // Wire buttons
  document.getElementById('loadBtn').addEventListener('click', loadExisting);
  document.getElementById('saveBtn').addEventListener('click', savePicks);
- document.getElementById('lockBtn').addEventListener('click', lockNow);
- document.getElementById('unlockBtn').addEventListener('click', unlockNow);
+ document.getElementById('adminBtn').addEventListener('click', openAdmin);
  document.getElementById('refreshStatus').addEventListener('click', loadStatus);
  async function loadEmails(){
   try { const r= await fetch('/api/pins/emails?ts='+Date.now()); const j= await r.json(); if(j.ok){ const sel=document.getElementById('email'); j.emails.forEach(e=>{ const opt=document.createElement('option'); opt.value=e; opt.textContent=e; sel.appendChild(opt); }); } } catch(e){}
  }
- setInterval(refreshLockStatus, 15000);
+ setInterval(()=>{ refreshLockStatus(); refreshGameLocks(); }, 20000);
  refreshLockStatus();
  setTimeout(loadStatus, 400);
  loadEmails();
+
+// -------- Per-game lock logic (Admin) --------
+let ADMIN_EMAIL = 'scire.ben@gmail.com';
+let adminAuthenticated = false;
+
+function openAdmin(){
+  const emailSel = document.getElementById('email');
+  const pinInput = document.getElementById('pin');
+  const status = document.getElementById('status');
+  if(emailSel.value.trim().toLowerCase() !== ADMIN_EMAIL){
+    status.textContent='Select your admin email first'; status.className='error'; return;
+  }
+  if(pinInput.value.trim().length !== 4){ status.textContent='Enter PIN'; status.className='error'; return; }
+  adminAuthenticated = true; // PIN validity enforced on each lock/unlock API call server-side
+  document.getElementById('adminPanel').style.display='block';
+  refreshGameLocks();
+}
+document.getElementById('closeAdmin').addEventListener('click',()=>{ document.getElementById('adminPanel').style.display='none'; });
+
+async function refreshGameLocks(){
+  try { const r = await fetch('/api/picks/saturday/game_locks?ts='+Date.now(), {cache:'no-store'}); if(!r.ok) return; const j = await r.json(); if(!j.ok) return; const host = document.getElementById('gameLocks'); if(!host) return; const locks = j.locks||[]; host.innerHTML = locks.map(l=>{
+    const eff = l.effectiveLocked; const started = l.started; const manual = l.manualLocked; const label = LABELS[l.index]||('Game '+(l.index+1));
+    return `<div style='background:#1f2a33;padding:8px 10px;border:1px solid #2d3b46;border-radius:6px;'>
+      <div style='font-weight:600;font-size:12px;margin-bottom:4px;'>${label.replace('NCAAF: ','')}</div>
+      <div style='font-size:11px;margin-bottom:6px;'>Start: ${(l.start||'').replace('T',' ').replace('Z','')}<br>Status: ${started?'Started':'Pre'}<br>Manual: ${manual?'Yes':'No'}<br>Effective: <span style='color:${eff?'#ffcc80':'#66ffa6'};'>${eff?'Locked':'Unlocked'}</span></div>
+      <div style='display:flex;gap:6px;flex-wrap:wrap;'>
+        <button type='button' data-act='lock' data-idx='${l.index}' ${eff&&started? 'disabled title="Started"':''} style='background:#8e24aa;font-size:11px;padding:6px 10px;'>Lock</button>
+        <button type='button' data-act='unlock' data-idx='${l.index}' ${started&&!manual? 'disabled title="Auto locked"':''} style='background:#c62828;font-size:11px;padding:6px 10px;'>Unlock</button>
+      </div>
+    </div>`;
+  }).join('');
+    host.querySelectorAll('button[data-act]').forEach(btn=>{
+      btn.addEventListener('click', ()=> doGameLock(btn.getAttribute('data-act'), parseInt(btn.getAttribute('data-idx'))));
+    });
+    // Visually mark locked matchups in main grid
+    locks.forEach(l=>{
+      if(!l.effectiveLocked) return; const matchDiv = document.querySelector(`.match input[data-idx='${l.index}']`);
+      if(matchDiv){
+        const container = matchDiv.closest('.match');
+        if(container && !container.querySelector('.lock-banner')){
+          const banner = document.createElement('div');
+          banner.className='lock-banner';
+          banner.textContent='LOCKED';
+          banner.style.cssText='position:absolute;top:6px;right:10px;background:#c62828;color:#fff;font-size:10px;font-weight:600;padding:2px 6px;border-radius:4px;letter-spacing:1px;';
+          container.style.position='relative';
+          container.appendChild(banner);
+          container.querySelectorAll('button.mc').forEach(b=>{ b.disabled=true; b.classList.remove('selected'); });
+        }
+      }
+    });
+  } catch(e){ /* silent */ }
+}
+async function doGameLock(action, index){
+  if(!adminAuthenticated) return; const email=document.getElementById('email').value.trim().toLowerCase(); const pin=document.getElementById('pin').value.trim(); const status=document.getElementById('status'); status.textContent=(action==='lock'?'Locking':'Unlocking')+' game...'; status.className='';
+  try {
+    const r = await fetch('/api/picks/saturday/'+(action==='lock'?'lock_game':'unlock_game'), {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ email, pin, index })});
+    const j = await r.json(); if(!r.ok || !j.ok){ status.textContent=j.error||'Failed'; status.className='error'; return; }
+    status.textContent='Updated'; status.className='success'; refreshGameLocks();
+  } catch(e){ status.textContent='Error'; status.className='error'; }
+}
 </script>
 </body>
 </html>
