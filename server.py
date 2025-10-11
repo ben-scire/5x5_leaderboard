@@ -1037,10 +1037,24 @@ def debug_sat_state():
     picks_count = len(SATURDAY_PICKS)
     sample = sorted(list(SATURDAY_PICKS.keys()))[:5]
     missing = [u for u in ALL_USERS if u not in SATURDAY_PICKS][:10]
+    # Determine current authoritative source
+    source = 'json-forced' if FORCE_SATURDAY_JSON else ('csv-log' if SATURDAY_CSV_LOG.exists() else 'json-snapshot')
+    def _fmt_mtime(path):
+        try:
+            if path.exists():
+                return time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(path.stat().st_mtime))
+        except Exception:
+            return None
+        return None
     return jsonify({
         'ok': True,
         'version': VERSION,
         'reloaded': reloaded,
+        'forceSaturdayJson': FORCE_SATURDAY_JSON,
+        'source': source,
+        'csvLogExists': SATURDAY_CSV_LOG.exists(),
+        'csvLogMtime': _fmt_mtime(SATURDAY_CSV_LOG),
+        'jsonSnapshotMtime': _fmt_mtime(SATURDAY_FILE),
         'scheduleCount': len(SATURDAY_SCHEDULE),
         'schedule': schedule,
         'picksCount': picks_count,
