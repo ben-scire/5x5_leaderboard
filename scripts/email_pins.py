@@ -22,6 +22,7 @@ from email.message import EmailMessage
 from pathlib import Path
 
 PINS_PATH = Path('data/picks/pins.json')
+SENT_LOG_PATH = Path('data/picks/pins_sent_log.json')  # records email -> { pin, firstSent, lastSent, count }
 
 SUBJECT = "Your 5x5 Saturday Pick Submission PIN"
 BODY_TEMPLATE = (
@@ -67,7 +68,26 @@ def build_message(email: str, pin: str, sender: str) -> EmailMessage:
     return msg
 
 
-def send_all(pins: dict, sender: str, host: str, port: int, user: str, password: str, dry_run: bool, only: str | None):
+def _load_sent_log():
+    if SENT_LOG_PATH.exists():
+        try:
+            with SENT_LOG_PATH.open('r', encoding='utf-8') as f:
+                data = json.load(f)
+            if isinstance(data, dict):
+                return data
+        except Exception:
+            return {}
+    return {}
+
+def _save_sent_log(data: dict):
+    try:
+        SENT_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with SENT_LOG_PATH.open('w', encoding='utf-8') as f:
+            json.dump(data, f, indent=2)
+    except Exception:
+        pass
+
+def send_all(pins: dict, sender: str, host: str, port: int, user: str, password: str, dry_run: bool, only: str | None, skip_already: bool):
     targets = pins
     if only:
         only_l = only.lower()
@@ -75,7 +95,12 @@ def send_all(pins: dict, sender: str, host: str, port: int, user: str, password:
             print(f"Email {only} not in pins list.")
             return
         targets = { only_l: pins[only_l] }
-    print(f"Preparing to {'preview' if dry_run else 'send'} {len(targets)} emails...")
+    sent_log = _load_sent_log()
+    if skip_already:
+        filtered = { e:p for e,p in targets.items() if e not in sent_log }
+        print(f"Skipping {len(targets)-len(filtered)} already-sent emails (use without --skip-already to resend).")
+        targets = filtered
+    print(f"Preparing to {'preview' if dry_run else 'send'} {len(targets)} emails ...")
     if dry_run:
         for e,p in targets.items():
             msg = build_message(e,p,sender)
@@ -96,18 +121,27 @@ def send_all(pins: dict, sender: str, host: str, port: int, user: str, password:
                     smtp.send_message(msg)
                     sent += 1
                     print(f"Sent to {e} (pin {p})")
+                    now_iso = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
+                    if e in sent_log:
+                        rec = sent_log[e]
+                        rec['lastSent'] = now_iso
+                        rec['count'] = rec.get('count',1) + 1
+                    else:
+                        sent_log[e] = { 'pin': p, 'firstSent': now_iso, 'lastSent': now_iso, 'count': 1 }
                     time.sleep(0.4)  # mild pacing
                     break
                 except Exception as ex:
                     print(f"Attempt {attempt} failed for {e}: {ex}")
                     time.sleep(1.0)
         print(f"Done. Sent {sent}/{len(targets)} emails.")
+    _save_sent_log(sent_log)
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--dry-run', action='store_true', help='Print emails instead of sending')
     ap.add_argument('--only', help='Send only to a single email')
+    ap.add_argument('--skip-already', action='store_true', help='Skip emails already present in sent log')
     args = ap.parse_args()
 
     pins = load_pins()
@@ -121,7 +155,7 @@ def main():
         print('Missing SMTP env vars (SMTP_HOST, SMTP_USER, SMTP_PASS). Use --dry-run to preview.', file=sys.stderr)
         sys.exit(2)
 
-    send_all(pins, sender, host, port, user, password, args.dry_run, args.only)
+    send_all(pins, sender, host, port, user, password, args.dry_run, args.only, args.skip_already)
 
 if __name__ == '__main__':
     main()
