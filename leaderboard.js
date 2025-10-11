@@ -117,11 +117,13 @@ function _norm(raw){
   s = s.replace(/\bst\b/g,'st');
   // Common team / shorthand expansions
   s = s.replace(/kansas st/g,'kansas state');
+  s = s.replace(/ohio st/g,'ohio state');
   s = s.replace(/wv?u/g,'west virginia');
   s = s.replace(/pittsburg?h?/g,'pittsburgh');
   s = s.replace(/ga tech|georgia tech/g,'georgia tech');
   s = s.replace(/south fla|s florida/g,'south florida');
   s = s.replace(/texas a ?&?m|texas am/g,'texas a&m');
+  s = s.replace(/mizzou|\bmiz\b/g,'missouri');
   s = s.replace(/nd$/,'notre dame');
   s = s.replace(/ala\b/g,'alabama');
   s = s.replace(/sc ?ar|s ?car|south car\b/g,'south carolina');
@@ -468,6 +470,19 @@ window.revealSaturday = function(){
 // Default to 2 (first two games live) for this week.
 window.partialSatRevealCount = 4; // expanded reveal: first four Saturday games now visible (Oregon & Texas games added)
 
+// Inject known Saturday finals (first two games) so hits/misses color immediately.
+try {
+  if(Array.isArray(coveredPicks['Sat'])){
+    if(coveredPicks['Sat'][0] == null) coveredPicks['Sat'][0] = 'Ohio State';
+    if(coveredPicks['Sat'][1] == null) coveredPicks['Sat'][1] = 'Missouri';
+    // Recalculate points for already revealed portion
+    recalcPoints('Sat');
+    recalcTotal();
+    updateLeaderboard();
+    if(picksDay==='Sat') renderPicksTable('Sat');
+  }
+} catch(_e){}
+
 // Admin helper to adjust on the fly if needed.
 window.setPartialSaturdayReveal = function(count){
   count = Math.max(0, Math.min(count, (picksLabels['Sat']||[]).length));
@@ -594,6 +609,10 @@ function liveGameCoverInfo(day, idx){
 }
 
 function renderPicksTable(day=picksDay){
+  // Override hook: if an admin sets window.FORCE_FULL_SATURDAY_REVEAL = true, ignore partialSatRevealCount (debug/override).
+  if(day==='Sat' && window.FORCE_FULL_SATURDAY_REVEAL===true){
+    window.partialSatRevealCount = (picksLabels['Sat']||[]).length;
+  }
   // Requirement update: show scheduled games for Sat-Sun-Mon again (no kickoff-based hiding). Always render all defined columns for selected day.
   const tbl = document.getElementById('picksTable');
   // Empty-state: if no users at all for the selected day, show a friendly hint instead of a totally blank table
