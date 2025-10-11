@@ -3,7 +3,7 @@
 from flask import Flask, jsonify, send_from_directory, request
 import time, os, json, pathlib
 
-VERSION = 'week-multi-3'
+VERSION = 'week-multi-4'  # bumped to force client cache bust (query params) after adding debug + cache headers
 
 # Final outcomes for the single Thursday game
 RESULTS = ['NYG', 'OVER', 'YES']  # Thursday: spread winner, total, prop
@@ -159,8 +159,8 @@ app = Flask(__name__, static_folder='.', static_url_path='')
 @app.after_request
 def _add_cache_headers(resp):
     ct = (resp.mimetype or '').lower()
-    if 'text/html' in ct:
-        # Strong no-cache for HTML documents
+    # Strong no-cache for HTML and JSON API responses to avoid stale schedule/picks data in browsers or CDN.
+    if 'text/html' in ct or 'application/json' in ct:
         resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
         resp.headers['Pragma'] = 'no-cache'
         resp.headers['Expires'] = '0'
@@ -935,6 +935,44 @@ def api_debug_thu():
 @app.route('/healthz')
 def healthz():
     return jsonify({ 'ok': True, 'version': VERSION, 'users': len(ALL_USERS), 'results': RESULTS, 'source': SOURCE })
+
+# -------- Saturday debug / introspection (to diagnose missing games or picks on production) --------
+def _saturday_log_info():
+    info = { 'exists': SATURDAY_CSV_LOG.exists() }
+    if not SATURDAY_CSV_LOG.exists():
+        return info
+    try:
+        stat = SATURDAY_CSV_LOG.stat()
+        info['sizeBytes'] = stat.st_size
+        info['modified'] = time.strftime('%Y-%m-%dT%H:%M:%S', time.gmtime(stat.st_mtime))
+        with SATURDAY_CSV_LOG.open('r', encoding='utf-8') as f:
+            lines = f.read().strip().splitlines()
+        info['rowCount'] = max(0, len(lines)-1) if lines else 0
+    except Exception as e:
+        info['error'] = str(e)
+    return info
+
+@app.route('/api/debug/sat_state')
+def debug_sat_state():
+    # Force reload from CSV if changed
+    reloaded = _maybe_reload_saturday()
+    # Basic stats
+    schedule = [ { 'i': i, 'away': g.get('awayAbbr') or g.get('away'), 'home': g.get('homeAbbr') or g.get('home'), 'eventId': g.get('eventId'), 'start': g.get('start') } for i,g in enumerate(SATURDAY_SCHEDULE) ]
+    picks_count = len(SATURDAY_PICKS)
+    sample = sorted(list(SATURDAY_PICKS.keys()))[:5]
+    missing = [u for u in ALL_USERS if u not in SATURDAY_PICKS][:10]
+    return jsonify({
+        'ok': True,
+        'version': VERSION,
+        'reloaded': reloaded,
+        'scheduleCount': len(SATURDAY_SCHEDULE),
+        'schedule': schedule,
+        'picksCount': picks_count,
+        'sampleEmails': sample,
+        'missingSample': missing,
+        'csv': _saturday_log_info(),
+        'locks': _saturday_effective_locks()
+    })
 
 @app.route('/api/schedule')
 def api_schedule():
