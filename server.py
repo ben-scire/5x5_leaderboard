@@ -2,12 +2,14 @@
 from flask import Flask, jsonify, send_from_directory, request
 import time, os, json, pathlib
 
-VERSION = 'minimal-thu-12'
+VERSION = 'week-multi-0'
 
 # Final outcomes for the single Thursday game
 RESULTS = ['NYG', 'OVER', 'YES']  # Thursday: spread winner, total, prop
 # Friday final winners (spread picks): index aligned with FRIDAY_LABELS
 FRIDAY_RESULTS = ['USF', 'WASH']
+# Saturday results placeholder (filled when games final). Length = 6 games
+SATURDAY_RESULTS = [None]*6
 
 # Hard-coded authoritative picks (email -> list[str]); may be overridden by file
 HARD_PICKS = {
@@ -56,7 +58,7 @@ else:
     SOURCE = 'embedded'
 
 ALL_USERS = sorted(HARD_PICKS.keys())
-TOTAL_POSSIBLE = len(RESULTS) + len(FRIDAY_RESULTS)
+TOTAL_POSSIBLE = len(RESULTS) + len(FRIDAY_RESULTS) + len(SATURDAY_RESULTS)
 
 app = Flask(__name__, static_folder='.', static_url_path='')
 
@@ -110,6 +112,108 @@ FRIDAY_SCHEDULE = [
         'start': '2025-10-10T23:59:00Z'  # normalized to same calendar date 10/10 UTC late evening
     }
 ]
+
+# ------------------ Saturday (new) ------------------
+SATURDAY_LABELS = [
+    'NCAAF: Ohio St -15.5 @ Illinois (pick team)',
+    'NCAAF: Alabama -3.5 @ Missouri (pick team)',
+    'NCAAF: Indiana +7.5 @ Oregon (pick team)',
+    'NCAAF: Oklahoma +2.5 @ Texas (pick team)',
+    'NCAAF: Georgia -4.5 @ Auburn (pick team)',
+    'NCAAF: BYU -2.5 @ Arizona (pick team)'
+]
+
+# For now eventIds unknown/placeholder; can be updated later with real ESPN IDs.
+# lineHome semantics: negative => home favored by abs(line); positive => away favored by that amount.
+SATURDAY_SCHEDULE = [
+    { 'sport':'NCAAF', 'eventId': None, 'away':'Ohio State', 'awayAbbr':'OHST', 'home':'Illinois', 'homeAbbr':'ILL', 'lineHome': +15.5, 'total': None, 'start':'2025-10-11T16:00:00Z' },
+    { 'sport':'NCAAF', 'eventId': None, 'away':'Alabama', 'awayAbbr':'ALA', 'home':'Missouri', 'homeAbbr':'MIZ', 'lineHome': +3.5, 'total': None, 'start':'2025-10-11T16:00:00Z' },
+    { 'sport':'NCAAF', 'eventId': None, 'away':'Indiana', 'awayAbbr':'IND', 'home':'Oregon', 'homeAbbr':'ORE', 'lineHome': -7.5, 'total': None, 'start':'2025-10-11T19:30:00Z' },
+    { 'sport':'NCAAF', 'eventId': None, 'away':'Oklahoma', 'awayAbbr':'OKLA', 'home':'Texas', 'homeAbbr':'TEX', 'lineHome': -2.5, 'total': None, 'start':'2025-10-11T19:30:00Z' },
+    { 'sport':'NCAAF', 'eventId': None, 'away':'Georgia', 'awayAbbr':'UGA', 'home':'Auburn', 'homeAbbr':'AUB', 'lineHome': +4.5, 'total': None, 'start':'2025-10-11T23:30:00Z' },
+    { 'sport':'NCAAF', 'eventId': None, 'away':'BYU', 'awayAbbr':'BYU', 'home':'Arizona', 'homeAbbr':'ARIZ', 'lineHome': +2.5, 'total': None, 'start':'2025-10-12T00:00:00Z' }
+]
+
+# Saturday storage paths
+SATURDAY_FILE = pathlib.Path('data/picks/saturday_picks.json')
+SATURDAY_CSV_LOG = pathlib.Path('data/picks/saturday_picks_log.csv')
+SATURDAY_LOCK_FILE = pathlib.Path('data/picks/saturday_locked.json')
+SATURDAY_LOCK_STATUS = pathlib.Path('data/picks/saturday_lock_status.json')
+
+def _load_saturday():
+    if SATURDAY_FILE.exists():
+        try:
+            with SATURDAY_FILE.open('r', encoding='utf-8') as f:
+                data = json.load(f)
+            if isinstance(data, dict):
+                out = {}
+                for email, picks in data.items():
+                    if isinstance(picks, list):
+                        adj = picks[:len(SATURDAY_LABELS)]
+                        while len(adj) < len(SATURDAY_LABELS):
+                            adj.append('')
+                        out[email] = [p.strip().upper() for p in adj]
+                return out
+        except Exception:
+            return {}
+    return {}
+
+def _save_saturday(data: dict):
+    try:
+        SATURDAY_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with SATURDAY_FILE.open('w', encoding='utf-8') as f:
+            json.dump(data, f, indent=2)
+        return True
+    except Exception:
+        return False
+
+def _append_saturday_csv(email: str, picks: list):
+    try:
+        SATURDAY_CSV_LOG.parent.mkdir(parents=True, exist_ok=True)
+        is_new = not SATURDAY_CSV_LOG.exists()
+        with SATURDAY_CSV_LOG.open('a', encoding='utf-8') as f:
+            if is_new:
+                f.write('ts_iso,email,' + ','.join([f'pick{i+1}' for i in range(len(SATURDAY_LABELS))]) + '\n')
+            ts = time.strftime('%Y-%m-%dT%H:%M:%S', time.gmtime())
+            row = [ts, email] + picks
+            safe = [c.replace('\n',' ').replace('\r',' ').replace(',', ' ') for c in row]
+            f.write(','.join(safe) + '\n')
+    except Exception:
+        pass
+
+def _is_saturday_locked():
+    return SATURDAY_LOCK_FILE.exists()
+
+def _load_saturday_locked():
+    if SATURDAY_LOCK_FILE.exists():
+        try:
+            with SATURDAY_LOCK_FILE.open('r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception:
+            return {}
+    return {}
+
+def _write_saturday_locked(snapshot: dict):
+    try:
+        SATURDAY_LOCK_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with SATURDAY_LOCK_FILE.open('w', encoding='utf-8') as f:
+            json.dump({ 'lockedAt': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()), 'picks': snapshot }, f, indent=2)
+        with SATURDAY_LOCK_STATUS.open('w', encoding='utf-8') as f:
+            json.dump({ 'locked': True, 'lockedAt': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()) }, f)
+        return True
+    except Exception:
+        return False
+
+def _load_saturday_lock_status():
+    if SATURDAY_LOCK_STATUS.exists():
+        try:
+            with SATURDAY_LOCK_STATUS.open('r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception:
+            return { 'locked': True }
+    return { 'locked': False }
+
+SATURDAY_PICKS = _load_saturday()
 
 def _seed_friday_from_csv():
     """If Fri_Picks.csv exists, load it (email,pick1,pick2) into initial FRIDAY_PICKS before JSON overrides.
@@ -448,7 +552,7 @@ def friday_log_latest():
         return jsonify({ 'ok': False, 'error': 'log_tail_failed', 'detail': str(e) }), 500
 
 def compute_scores():
-    """Return sorted list of scoreboard entries for all users (Thu + Fri)."""
+    """Return sorted list of scoreboard entries for all users (Thu + Fri + Sat)."""
     entries = []
     for email in ALL_USERS:
         # Thursday
@@ -464,8 +568,16 @@ def compute_scores():
             if a == b:
                 fri_score += 1
 
-        total_score = thu_score + fri_score
-        total_answered = thu_answered + fri_answered
+        # Saturday
+        sat_picks = SATURDAY_PICKS.get(email, [])
+        sat_answered = sum(1 for p in sat_picks if p)
+        sat_score = 0
+        for a, b in zip(sat_picks, SATURDAY_RESULTS):
+            if b and a == b:
+                sat_score += 1
+
+        total_score = thu_score + fri_score + sat_score
+        total_answered = thu_answered + fri_answered + sat_answered
 
         entries.append({
             'email': email,
@@ -474,7 +586,8 @@ def compute_scores():
             'totalPossible': TOTAL_POSSIBLE,
             'perDay': {
                 'Thu': { 'score': thu_score, 'answered': thu_answered },
-                'Fri': { 'score': fri_score, 'answered': fri_answered }
+                'Fri': { 'score': fri_score, 'answered': fri_answered },
+                'Sat': { 'score': sat_score, 'answered': sat_answered }
             }
         })
     entries.sort(key=lambda r: (-r['score'], r['answered'], r['email']))
@@ -485,7 +598,7 @@ def api_leaderboard():
     entries = compute_scores()
     return jsonify({
         'ok': True,
-        'dayOrder': ['Thu','Fri'],
+        'dayOrder': ['Thu','Fri','Sat'],
         'totalPossible': TOTAL_POSSIBLE,
         'entries': entries,
         'generated': int(time.time()*1000)
@@ -507,6 +620,12 @@ def api_picks_public():
             'ok': True,
             'entries': { email: { 'picks': picks, 'ts': now } for email, picks in FRIDAY_PICKS.items() }
         })
+    if day.startswith('sat'):
+        now = int(time.time()*1000)
+        return jsonify({
+            'ok': True,
+            'entries': { email: { 'picks': picks, 'ts': now } for email, picks in SATURDAY_PICKS.items() }
+        })
     return jsonify({ 'ok': False, 'error': 'unsupported_day' }), 400
 
 @app.route('/api/debug/thu')
@@ -521,15 +640,93 @@ def healthz():
 
 @app.route('/api/schedule')
 def api_schedule():
-    """Provide minimal schedule JSON consumed by schedule_init.js for live Friday board."""
-    # Thursday left minimal (historical). Only supply Friday picks & games for now.
+    """Provide schedule JSON consumed by schedule_init.js (Fri + Sat)."""
     days = {
         'Fri': {
             'games': FRIDAY_SCHEDULE,
             'picks': [ { 'label': lbl } for lbl in FRIDAY_LABELS ]
+        },
+        'Sat': {
+            'games': SATURDAY_SCHEDULE,
+            'picks': [ { 'label': lbl } for lbl in SATURDAY_LABELS ]
         }
     }
     return jsonify({ 'ok': True, 'version': VERSION, 'days': days })
+
+# -------- Saturday endpoints (mirroring Friday pattern) --------
+@app.route('/api/picks/saturday/labels')
+def saturday_labels():
+    return jsonify({ 'ok': True, 'labels': SATURDAY_LABELS })
+
+@app.route('/api/picks/saturday/get')
+def saturday_get():
+    email = (request.args.get('email') or '').strip().lower()
+    picks = SATURDAY_PICKS.get(email)
+    return jsonify({ 'ok': True, 'email': email, 'picks': picks })
+
+@app.route('/api/picks/saturday/submit', methods=['POST'])
+def saturday_submit():
+    payload = request.get_json(force=True, silent=True) or {}
+    email = (payload.get('email') or '').strip().lower()
+    picks = payload.get('picks') or []
+    if _is_saturday_locked():
+        return jsonify({ 'ok': False, 'error': 'locked' }), 403
+    if not email:
+        return jsonify({ 'ok': False, 'error': 'email_required' }), 400
+    if not isinstance(picks, list) or len(picks) != len(SATURDAY_LABELS):
+        return jsonify({ 'ok': False, 'error': 'invalid_picks_length', 'expected': len(SATURDAY_LABELS) }), 400
+    norm = [str(p or '').strip().upper() for p in picks]
+    SATURDAY_PICKS[email] = norm
+    if not _save_saturday(SATURDAY_PICKS):
+        return jsonify({ 'ok': False, 'error': 'persist_failed' }), 500
+    _append_saturday_csv(email, norm)
+    return jsonify({ 'ok': True, 'saved': True })
+
+@app.route('/api/picks/saturday/status')
+def saturday_status():
+    submitted = sorted(SATURDAY_PICKS.keys())
+    missing = [u for u in ALL_USERS if u not in SATURDAY_PICKS]
+    return jsonify({ 'ok': True, 'submitted': submitted, 'missing': missing, 'submittedCount': len(submitted), 'missingCount': len(missing), 'locked': _is_saturday_locked() })
+
+@app.route('/api/picks/saturday/lock', methods=['POST'])
+def saturday_lock():
+    if _is_saturday_locked():
+        data = _load_saturday_locked()
+        return jsonify({ 'ok': True, 'alreadyLocked': True, 'lockedAt': data.get('lockedAt'), 'count': len(data.get('picks', {})) })
+    snapshot = SATURDAY_PICKS.copy()
+    if not _write_saturday_locked(snapshot):
+        return jsonify({ 'ok': False, 'error': 'lock_write_failed' }), 500
+    return jsonify({ 'ok': True, 'locked': True, 'count': len(snapshot) })
+
+@app.route('/api/picks/saturday/lock/status')
+def saturday_lock_status():
+    st = _load_saturday_lock_status()
+    if st.get('locked'):
+        data = _load_saturday_locked()
+        st['count'] = len(data.get('picks', {}))
+        st['emails'] = sorted(data.get('picks', {}).keys())
+    return jsonify({ 'ok': True, **st })
+
+@app.route('/api/picks/saturday/all')
+def saturday_all():
+    counts = [ {} for _ in range(len(SATURDAY_LABELS)) ]
+    for email, picks in SATURDAY_PICKS.items():
+        for i, val in enumerate(picks):
+            if not val: continue
+            d = counts[i]
+            d[val] = d.get(val, 0) + 1
+    locked = _is_saturday_locked()
+    lockedData = _load_saturday_locked() if locked else None
+    return jsonify({
+        'ok': True,
+        'labels': SATURDAY_LABELS,
+        'totalSubmissions': len(SATURDAY_PICKS),
+        'picks': SATURDAY_PICKS,
+        'counts': counts,
+        'locked': locked,
+        'lockedSnapshot': lockedData.get('picks') if lockedData else None,
+        'lockedAt': lockedData.get('lockedAt') if lockedData else None
+    })
 
 @app.route('/')
 def root():

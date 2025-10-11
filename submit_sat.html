@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Submit Saturday Picks</title>
+  <link rel="stylesheet" href="leaderboard.css?v=12">
+  <style>
+    body{font-family:Inter,Arial,sans-serif;background:#0f1419;color:#e5e5e5;padding:24px;}
+    h1{margin-top:0;font-size:22px;}
+    .card{background:#1b232c;border:1px solid #24303c;padding:20px;max-width:760px;border-radius:10px;box-shadow:0 4px 12px -4px #000;} 
+    label{display:block;font-size:13px;margin-bottom:4px;font-weight:600;color:#9cc4ff;} 
+    input[type=email]{width:100%;padding:8px 10px;border:1px solid #314355;background:#0f1419;color:#e5e5e5;border-radius:6px;font-size:14px;} 
+    button{background:#1976d2;color:#fff;font-weight:600;border:none;padding:10px 18px;border-radius:6px;cursor:pointer;transition:background .15s, box-shadow .15s;} 
+    button:disabled{background:#274865;opacity:.6;cursor:not-allowed;} 
+    button.mc{background:#233345;padding:10px 14px;font-size:13px;border:1px solid #35526b;border-radius:22px;letter-spacing:.5px;min-width:68px;text-transform:uppercase;position:relative;}
+    button.mc:hover{background:#2d4660;}
+    button.mc.selected{background:#00897b;border-color:#00bfa5;box-shadow:0 0 0 2px rgba(0,191,165,0.25);} 
+    button.mc.selected::after{content:'\2713';position:absolute;top:-6px;right:-6px;background:#00bfa5;color:#062a27;font-size:12px;width:20px;height:20px;display:flex;align-items:center;justify-content:center;border-radius:50%;box-shadow:0 2px 4px -2px #000;}
+    .match{background:#152027;padding:12px 14px;border:1px solid #22323e;border-radius:10px;}
+    .btnrow{display:flex;gap:10px;flex-wrap:wrap;}
+    #status{font-size:12px;margin-left:12px;color:#90caf9;} 
+    .note{font-size:12px;color:#888;margin-top:6px;} 
+    .success{color:#66ffa6;} .error{color:#ff6b6b;} 
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px;}
+  </style>
+</head>
+<body>
+  <h1>Saturday Picks Submission</h1>
+  <p style="font-size:13px;max-width:780px;">Select one team for each matchup (ATS). You can overwrite until locked. All picks stored immediately. Abbreviations auto-uppercase.</p>
+  <div class="card">
+    <div class="row"><label>Email <input id="email" type="email" required placeholder="you@example.com" /></label></div>
+    <div id="matchups" class="grid"></div>
+    <div class="row" style="margin-top:18px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+      <button id="loadBtn" type="button">Load Existing</button>
+      <button id="saveBtn" type="button">Save Picks</button>
+      <button id="lockBtn" type="button" style="background:#8e24aa;">Lock (Admin)</button>
+      <span id="status"></span>
+    </div>
+    <div class="note">Locking is manual for now. Live scoring not yet wired (results placeholder).</div>
+    <div style="margin-top:22px;">
+      <div style="font-size:13px;font-weight:600;margin-bottom:6px;color:#9cc4ff;display:flex;align-items:center;gap:10px;">Saturday Submission Status <button id="refreshStatus" type="button" style="background:#233345;border:1px solid #35526b;color:#9cc4ff;font-size:12px;padding:6px 10px;border-radius:6px;cursor:pointer;">Refresh</button></div>
+      <div id="satStatus" style="font-size:12px;line-height:1.5;background:#152027;border:1px solid #22323e;padding:10px 12px;border-radius:8px;max-height:240px;overflow:auto;"></div>
+    </div>
+  </div>
+  <p style="margin-top:28px;"><a href="leaderboard.html" style="color:#64b5f6;">Back to Leaderboard</a></p>
+<script>
+const LABELS = [
+  'NCAAF: Ohio St -15.5 @ Illinois (pick team)',
+  'NCAAF: Alabama -3.5 @ Missouri (pick team)',
+  'NCAAF: Indiana +7.5 @ Oregon (pick team)',
+  'NCAAF: Oklahoma +2.5 @ Texas (pick team)',
+  'NCAAF: Georgia -4.5 @ Auburn (pick team)',
+  'NCAAF: BYU -2.5 @ Arizona (pick team)'
+];
+// Extract two team tokens from label. Fallback to manual split on '@'.
+function parseTeams(label){
+  // Pattern: Prefix: TeamA +/-X.X @ TeamB
+  const atIdx = label.indexOf('@');
+  if(atIdx === -1) return [];
+  // Get part before '(' then split around '@'
+  const core = label.split('(pick')[0];
+  const left = core.split('@')[0];
+  const right = core.split('@')[1];
+  if(!right) return [];
+  const teamA = left.replace(/.*:/,'').trim();
+  const spreadMatch = teamA.match(/(.+?)\s[-+]\d/); // capture before spread
+  const aName = spreadMatch? spreadMatch[1].trim() : teamA.trim();
+  const teamB = right.trim();
+  // Remove trailing (pick team) etc.
+  const cleanB = teamB.replace(/\(.*$/,'').trim();
+  return [aName, cleanB];
+}
+function abbrize(name){
+  return name
+    .replace(/Ohio State/i,'OHST')
+    .replace(/Illinois/i,'ILL')
+    .replace(/Alabama/i,'ALA')
+    .replace(/Missouri/i,'MIZ')
+    .replace(/Indiana/i,'IND')
+    .replace(/Oregon/i,'ORE')
+    .replace(/Oklahoma/i,'OKLA')
+    .replace(/Texas$/i,'TEX')
+    .replace(/Georgia/i,'UGA')
+    .replace(/Auburn/i,'AUB')
+    .replace(/Arizona$/i,'ARIZ')
+    .replace(/BYU/i,'BYU');
+}
+function render(){
+  const host = document.getElementById('matchups');
+  host.innerHTML = LABELS.map((lbl,i)=>{
+    const teams = parseTeams(lbl);
+    const btns = teams.map(t=> `<button type='button' class='mc' data-idx='${i}' data-val='${abbrize(t).toUpperCase()}'>${abbrize(t).toUpperCase()}</button>`).join('');
+    return `<div class='match'><div style='font-size:13px;font-weight:600;margin-bottom:6px;'>${lbl}</div><div class='btnrow' data-group='${i}'>${btns}</div><input type='hidden' data-idx='${i}' /></div>`;
+  }).join('');
+  host.querySelectorAll('button.mc').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      const b=e.currentTarget; const idx=b.getAttribute('data-idx');
+      host.querySelectorAll(`button.mc[data-idx='${idx}']`).forEach(o=>{ o.classList.remove('selected'); o.setAttribute('aria-pressed','false'); });
+      b.classList.add('selected'); b.setAttribute('aria-pressed','true');
+      const hidden = host.querySelector(`input[data-idx='${idx}']`); if(hidden) hidden.value = b.getAttribute('data-val');
+    });
+  });
+}
+render();
+async function loadExisting(){
+  const email = document.getElementById('email').value.trim().toLowerCase();
+  const status = document.getElementById('status');
+  if(!email){ status.textContent='Enter email'; status.className='error'; return; }
+  status.textContent='Loading...'; status.className='';
+  try {
+    const r = await fetch('/api/picks/saturday/get?email='+encodeURIComponent(email));
+    const j = await r.json();
+    if(j && j.picks){
+      j.picks.forEach((v,i)=>{ const inp=document.querySelector(`input[data-idx='${i}']`); if(inp) inp.value=v; if(v){ const btn=document.querySelector(`button.mc[data-idx='${i}'][data-val='${v}']`); if(btn){ btn.click(); } } });
+      status.textContent='Loaded'; status.className='success';
+    } else { status.textContent='No existing picks'; }
+  } catch(e){ status.textContent='Load failed'; status.className='error'; }
+}
+async function savePicks(){
+  const email = document.getElementById('email').value.trim().toLowerCase();
+  const status = document.getElementById('status');
+  if(!email){ status.textContent='Enter email'; status.className='error'; return; }
+  const inputs = Array.from(document.querySelectorAll('input[data-idx]'));
+  const picks = inputs.map(inp=> (inp.value||'').trim().toUpperCase());
+  if(picks.some(p=>!p)){ status.textContent='Select all picks'; status.className='error'; return; }
+  status.textContent='Saving...'; status.className='';
+  try {
+    const r = await fetch('/api/picks/saturday/submit',{method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ email, picks })});
+    const j = await r.json();
+    if(!r.ok || !j.ok){ status.textContent=j.error||'Save failed'; status.className='error'; return; }
+    status.textContent='Saved'; status.className='success';
+  } catch(e){ status.textContent='Save failed'; status.className='error'; }
+}
+async function refreshLockStatus(){
+  try {
+    const r = await fetch('/api/picks/saturday/lock/status?ts='+Date.now(), {cache:'no-store'});
+    if(!r.ok) return; const j = await r.json(); if(!j.ok) return; const locked = !!j.locked;
+    const saveBtn = document.getElementById('saveBtn'); if(locked){ saveBtn.disabled=true; saveBtn.textContent='Locked'; document.getElementById('lockBtn').disabled=true; const st=document.getElementById('status'); st.textContent='Locked at '+(j.lockedAt||''); st.className='success'; }
+  } catch(_e){}
+}
+async function lockNow(){
+  if(!confirm('Lock Saturday picks now?')) return;
+  const status = document.getElementById('status'); status.textContent='Locking...'; status.className='';
+  try { const r = await fetch('/api/picks/saturday/lock',{method:'POST'}); const j = await r.json(); if(!r.ok||!j.ok){ status.textContent=j.error||'Lock failed'; status.className='error'; return; } status.textContent='Locked ('+(j.count||0)+' users)'; status.className='success'; refreshLockStatus(); loadStatus(); } catch(e){ status.textContent='Lock failed'; status.className='error'; }
+}
+async function loadStatus(){
+  try { const r = await fetch('/api/picks/saturday/status?ts='+Date.now(), {cache:'no-store'}); if(!r.ok) throw 0; const j = await r.json(); if(!j.ok) throw 0; const sub=j.submitted||[], miss=j.missing||[]; const total=sub.length+miss.length; const pct= total? Math.round(sub.length/total*100):0; const frag = `<div style='margin-bottom:6px;'>Submitted: <span style='color:#66ffa6;font-weight:600;'>${sub.length}</span> / ${total} (${pct}%)</div>` + (sub.length? `<div style='margin-bottom:6px;'><span style='color:#66ffa6;font-weight:600;'>Submitted Emails</span><br>${sub.map(e=>`<span style='display:inline-block;margin:2px 6px 2px 0;padding:2px 6px;border-radius:4px;background:#1e2d24;color:#66ffa6;'>${e.split('@')[0]}</span>`).join('')}</div>`:'') + (miss.length? `<div style='margin-top:4px;'><span style='color:#ffb74d;font-weight:600;'>Missing</span><br>${miss.map(e=>`<span style='display:inline-block;margin:2px 6px 2px 0;padding:2px 6px;border-radius:4px;background:#332416;color:#ffcc80;'>${e.split('@')[0]}</span>`).join('')}</div>`:''); document.getElementById('satStatus').innerHTML=frag; } catch(e){ document.getElementById('satStatus').innerHTML='<span style="color:#ff6b6b;">Status load failed</span>'; }
+}
+// Wire buttons
+ document.getElementById('loadBtn').addEventListener('click', loadExisting);
+ document.getElementById('saveBtn').addEventListener('click', savePicks);
+ document.getElementById('lockBtn').addEventListener('click', lockNow);
+ document.getElementById('refreshStatus').addEventListener('click', loadStatus);
+ setInterval(refreshLockStatus, 15000);
+ refreshLockStatus();
+ setTimeout(loadStatus, 400);
+</script>
+</body>
+</html>
