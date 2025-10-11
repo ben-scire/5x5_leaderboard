@@ -79,6 +79,7 @@ FRIDAY_FILE = pathlib.Path('data/picks/friday_picks.json')
 FRIDAY_CSV_LOG = pathlib.Path('data/picks/friday_picks_log.csv')
 FRIDAY_LOCK_FILE = pathlib.Path('data/picks/friday_locked.json')
 FRIDAY_LOCK_STATUS = pathlib.Path('data/picks/friday_lock_status.json')
+FRIDAY_SEED_CSV = pathlib.Path('data/picks/Fri_Picks.csv')  # new: seed file provided by user
 FRIDAY_LABELS = [
     'NCAAF: USF +1.5 @ UNT (pick team)',
     'NCAAF: Rutgers +10.5 @ WASH (pick team)'
@@ -87,7 +88,9 @@ FRIDAY_LABELS = [
 # Static Friday schedule (live board) with ESPN event IDs.
 # Lines chosen to match displayed pick lines (not necessarily latest market line).
 FRIDAY_SCHEDULE = [
+    # Both games explicitly dated 2025-10-10 UTC start approximations; sport metadata included.
     {
+        'sport': 'NCAAF',
         'eventId': '401762481',
         'away': 'South Florida', 'awayAbbr': 'USF',
         'home': 'North Texas',   'homeAbbr': 'UNT',
@@ -96,14 +99,51 @@ FRIDAY_SCHEDULE = [
         'start': '2025-10-10T23:30:00Z'
     },
     {
+        'sport': 'NCAAF',
         'eventId': '401752862',
         'away': 'Rutgers',    'awayAbbr': 'RUT',
         'home': 'Washington', 'homeAbbr': 'WASH',
         'lineHome': -10.5,
         'total': None,
-        'start': '2025-10-11T01:00:00Z'
+        'start': '2025-10-10T23:59:00Z'  # normalized to same calendar date 10/10 UTC late evening
     }
 ]
+
+def _seed_friday_from_csv():
+    """If Fri_Picks.csv exists, load it (email,pick1,pick2) into initial FRIDAY_PICKS before JSON overrides.
+    Existing friday_picks.json (if present) still persists subsequent submissions; CSV only seeds once at startup.
+    """
+    if not FRIDAY_SEED_CSV.exists():
+        return {}
+    seeded = {}
+    try:
+        with FRIDAY_SEED_CSV.open('r', encoding='utf-8') as f:
+            lines = f.read().strip().splitlines()
+        if not lines:
+            return {}
+        header = [h.strip().lower() for h in lines[0].split(',')]
+        # Expect at least: email,pick1,pick2
+        for line in lines[1:]:
+            if not line.strip():
+                continue
+            parts = [p.strip() for p in line.split(',')]
+            if len(parts) < 1 + len(FRIDAY_LABELS):
+                continue
+            email = parts[0].lower()
+            picks = [p.upper() for p in parts[1:1+len(FRIDAY_LABELS)]]
+            # Normalize abbreviations allowed: USF/UNT/RUT/WASH
+            normalized = []
+            for p in picks:
+                np = p
+                if p in ('SOUTH FLORIDA','USF'): np = 'USF'
+                elif p in ('NORTH TEXAS','NT','UNT'): np = 'UNT'
+                elif p in ('RUTGERS','RUT'): np = 'RUT'
+                elif p in ('WASHINGTON','UW','WASH'): np = 'WASH'
+                normalized.append(np)
+            seeded[email] = normalized
+        return seeded
+    except Exception:
+        return {}
 
 def _load_friday():
     if FRIDAY_FILE.exists():
@@ -206,7 +246,14 @@ def _load_friday_lock_status():
             return { 'locked': True }
     return { 'locked': False }
 
-FRIDAY_PICKS = _load_friday()  # email -> list[str]
+_seeded_csv = _seed_friday_from_csv()
+FRIDAY_PICKS = _seeded_csv if _seeded_csv else _load_friday()  # email -> list[str]
+if _seeded_csv:
+    # Persist the seeded data into friday_picks.json so endpoints reflect it even if CSV removed later.
+    try:
+        _save_friday(FRIDAY_PICKS)
+    except Exception:
+        pass
 
 @app.route('/api/picks/friday/labels')
 def friday_labels():
