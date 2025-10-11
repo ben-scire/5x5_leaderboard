@@ -23,15 +23,9 @@
 // dynamic game objects are not present/loaded). This guarantees a scoreboard
 // row with actual final scores instead of a blank table.
 // NOTE: Thursday NFL: Miami @ Buffalo final 21-31 (BUF wins, MIA covers +11.5, total 52 > 50.5 => Over)
-// Updated static finals placeholder (only used if schedule fetch fails): NCAAF USF @ UNT and Rutgers @ Washington
+// Static finals only retained for Thursday fallback; Friday will always rely on schedule/live state to avoid 0-0 FINAL artifact.
 const finalResults = {
-  'Thu': [
-    { awayAbbr:'PHI', homeAbbr:'NYG', awayScore:0, homeScore:0, lineHome:7.5, total:40.5 }
-  ],
-  'Fri': [
-    { awayAbbr:'USF', homeAbbr:'UNT', awayScore:0, homeScore:0, lineHome:-1.5, total:null },
-    { awayAbbr:'RUT', homeAbbr:'WASH', awayScore:0, homeScore:0, lineHome:-10.5, total:null }
-  ]
+  'Thu': [ { awayAbbr:'PHI', homeAbbr:'NYG', awayScore:0, homeScore:0, lineHome:7.5, total:40.5 } ]
 };
 
 // Hydrate Friday picks immediately if public endpoint already has entries (covers issue with users missing on load)
@@ -42,13 +36,19 @@ const finalResults = {
     Object.keys(entries).forEach(email=>{
       if(!userPicks.Fri[email]){
         const arr = entries[email].picks || [];
-        const needed = picksLabels.Fri.length || 2;
+        const needed = (picksLabels && picksLabels.Fri && picksLabels.Fri.length) ? picksLabels.Fri.length : (arr.length || 2);
         let adj = arr.slice(0, needed);
         while(adj.length < needed) adj.push('');
         userPicks.Fri[email] = adj;
         // Ensure user object exists for leaderboard
         if(!users.find(u=>u.username===email)){
           users.push({ username:email, thurs:0,fri:0,sat:0,sun:0,mon:0,total:0 });
+        }
+      } else {
+        // Merge in any missing slots if labels expanded later
+        const needed = picksLabels.Fri.length;
+        if(userPicks.Fri[email].length < needed){
+          while(userPicks.Fri[email].length < needed) userPicks.Fri[email].push('');
         }
       }
     });
@@ -625,8 +625,8 @@ function updateScoreboard(){
     day==='Mon'? { games:mondayGames, states:mondayStates, times:mondayStartTimes } : { games:[], states:[], times:[] };
   const { games, states, times } = meta(scoreboardDay);
 
-  // If past completed day (Thu/Fri) and we have static final results, render those (preferred over labels fallback)
-  if((scoreboardDay==='Thu' || scoreboardDay==='Fri') && (!games || !games.length) && finalResults[scoreboardDay]){
+  // If past completed day (Thursday only now) and we have static final results, render those (preferred over labels fallback)
+  if((scoreboardDay==='Thu') && (!games || !games.length) && finalResults[scoreboardDay]){
   // For Thursday, if we *do* have a live nflGame state, skip static finals.
     if(!(scoreboardDay==='Thu' && nflGame && nflState && typeof nflState.status==='string')){
     console.log('[Scoreboard] Using static finals for', scoreboardDay, 'games length=', games?games.length:0);
@@ -673,6 +673,10 @@ function updateScoreboard(){
     if(!games.length){ console.log('[Scoreboard] No games array for day', scoreboardDay); }
     const st = states && states[i] ? states[i] : null; if(st) st._idx = i; // attach index for statusDetail time lookup
     const live = st && st.status && st.status !== 'STATUS_SCHEDULED';
+    // Guard: do not show FINAL 0-0; if scores are 0-0 and status final, downgrade to scheduled placeholder
+    if(st && st.status==='STATUS_FINAL' && st.home===0 && st.away===0){
+      st.status='STATUS_SCHEDULED';
+    }
     const scoreFrag = live ? `${st.away}-${st.home}` : (times && times[i] ? times[i] : '');
     const detail = statusDetail(st);
     const spread = spreadLabel(g);
