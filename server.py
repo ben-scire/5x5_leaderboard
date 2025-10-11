@@ -1166,6 +1166,38 @@ def saturday_all():
         'gameLocks': _saturday_effective_locks()
     })
 
+@app.route('/api/admin/saturday/rebuild', methods=['POST'])
+def admin_saturday_rebuild():
+    """Admin: Rebuild in-memory + JSON snapshot of Saturday picks from CSV log.
+    Optional ADMIN_TOKEN gate: if env ADMIN_TOKEN set, require ?token= or header X-Admin-Token.
+    Returns before/after counts and which emails were added/updated.
+    """
+    token = request.args.get('token') or request.headers.get('X-Admin-Token')
+    admin_token = os.environ.get('ADMIN_TOKEN')
+    if admin_token and token != admin_token:
+        return jsonify({ 'ok': False, 'error': 'forbidden' }), 403
+    before_keys = set(SATURDAY_PICKS.keys())
+    latest = _snapshot_latest_saturday_from_log()
+    if not isinstance(latest, dict):
+        return jsonify({ 'ok': False, 'error': 'rebuild_failed' }), 500
+    added = [e for e in latest.keys() if e not in before_keys]
+    changed = []
+    for e in latest:
+        if e in SATURDAY_PICKS and SATURDAY_PICKS[e] != latest[e]:
+            changed.append(e)
+    # Replace and persist
+    globals()['SATURDAY_PICKS'] = latest
+    _save_saturday(SATURDAY_PICKS)
+    _refresh_all_users()
+    return jsonify({
+        'ok': True,
+        'countBefore': len(before_keys),
+        'countAfter': len(SATURDAY_PICKS),
+        'added': sorted(added),
+        'changed': sorted(changed),
+        'snapshotSaved': True
+    })
+
 # --- New Saturday per-game lock endpoints ---
 ADMIN_EMAIL = 'scire.ben@gmail.com'  # single admin (adjust if needed)
 
