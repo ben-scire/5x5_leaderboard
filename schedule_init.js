@@ -129,6 +129,28 @@
     }
 
     console.log('[ScheduleInit] Loaded schedule version', payload.version, 'days:', Object.keys(days));
+    // Ensure user objects exist for Friday (and other days) based on loaded public picks so scoring can display immediately.
+    try {
+      ['Fri','Sat','Sun','Mon'].forEach(d=>{
+        const dayPicks = userPicks[d] || {};
+        Object.keys(dayPicks).forEach(email=>{
+          if(!Array.isArray(users)) return;
+            if(!users.find(u=>u.username===email)){
+              users.push({ username:email, thurs:0,fri:0,sat:0,sun:0,mon:0,total:0 });
+            }
+        });
+      });
+      if(typeof recalcPoints==='function'){
+        recalcPoints('Thu');
+        recalcPoints('Fri');
+        recalcPoints('Sat');
+        recalcPoints('Sun');
+        recalcPoints('Mon');
+      }
+      if(typeof recalcTotal==='function') recalcTotal();
+      if(typeof updateLeaderboard==='function') updateLeaderboard();
+      if(typeof renderPicksTable==='function') renderPicksTable('Fri');
+    } catch(e){ console.warn('[ScheduleInit] user seed/recalc failed', e); }
     // Trigger scoreboard refresh now that schedule is ready
     if(typeof updateScoreboard==='function') try { updateScoreboard(); } catch(_e){}
   } catch(err){ console.warn('[ScheduleInit] Fatal error', err); }
