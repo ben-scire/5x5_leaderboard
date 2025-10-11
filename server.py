@@ -2,7 +2,7 @@
 from flask import Flask, jsonify, send_from_directory, request
 import time, os, json, pathlib
 
-VERSION = 'week-multi-1'
+VERSION = 'week-multi-2'
 
 # Final outcomes for the single Thursday game
 RESULTS = ['NYG', 'OVER', 'YES']  # Thursday: spread winner, total, prop
@@ -62,8 +62,10 @@ ALL_USERS = sorted(HARD_PICKS.keys())
 # ---- PIN system (simple 4-digit per email) ----
 PINS_FILE = pathlib.Path('data/picks/pins.json')
 ALLOWED_EMAILS_FILE = pathlib.Path('data/allowed_emails.json')
+ACTIVE_EMAILS_FILE = pathlib.Path('data/active_emails.json')  # optional narrower roster for this week
 
 def _load_allowed_emails():
+    """Union of Thursday core users + allowed_emails.json; optionally narrowed by active_emails.json."""
     emails = set(ALL_USERS)
     try:
         if ALLOWED_EMAILS_FILE.exists():
@@ -73,6 +75,16 @@ def _load_allowed_emails():
                 for e in data:
                     if isinstance(e, str) and '@' in e:
                         emails.add(e.strip().lower())
+    except Exception:
+        pass
+    # Apply active filter if present
+    try:
+        if ACTIVE_EMAILS_FILE.exists():
+            with ACTIVE_EMAILS_FILE.open('r', encoding='utf-8') as f:
+                active = json.load(f)
+            if isinstance(active, list) and active:
+                active_set = { a.strip().lower() for a in active if isinstance(a,str) }
+                emails = emails.intersection(active_set)
     except Exception:
         pass
     return sorted(emails)
@@ -114,6 +126,8 @@ def _load_or_create_pins(emails):
 
 ALLOWED_EMAILS = _load_allowed_emails()
 PIN_MAP = _load_or_create_pins(ALLOWED_EMAILS)
+# If pins file had entries for emails now inactive, drop them from runtime map (do not rewrite file automatically).
+PIN_MAP = { k:v for k,v in PIN_MAP.items() if k in ALLOWED_EMAILS }
 
 def _check_pin(email: str, pin: str):
     return PIN_MAP.get(email.lower()) == pin
@@ -671,7 +685,32 @@ def api_leaderboard():
 @app.route('/api/pins/emails')
 def api_pins_emails():
     """Return list of selectable emails (no pins)."""
-    return jsonify({ 'ok': True, 'emails': ALLOWED_EMAILS, 'version': VERSION })
+    return jsonify({ 'ok': True, 'emails': ALLOWED_EMAILS, 'version': VERSION, 'partialSaturdayAllowed': True })
+
+@app.route('/api/pins/active', methods=['POST'])
+def api_pins_set_active():
+    """Admin: overwrite active_emails.json (requires ADMIN_TOKEN if set). Body: { emails: [..] }"""
+    token = request.args.get('token') or (request.headers.get('X-Admin-Token'))
+    admin_token = os.environ.get('ADMIN_TOKEN')
+    if admin_token and token != admin_token:
+        return jsonify({ 'ok': False, 'error': 'forbidden' }), 403
+    payload = request.get_json(force=True, silent=True) or {}
+    emails = payload.get('emails')
+    if not isinstance(emails, list) or not all(isinstance(e,str) for e in emails):
+        return jsonify({ 'ok': False, 'error': 'invalid_emails' }), 400
+    # Write file
+    try:
+        ACTIVE_EMAILS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with ACTIVE_EMAILS_FILE.open('w', encoding='utf-8') as f:
+            json.dump(sorted({ e.strip().lower() for e in emails if '@' in e }), f, indent=2)
+    except Exception as e:
+        return jsonify({ 'ok': False, 'error': 'write_failed', 'detail': str(e) }), 500
+    # Reload allowed + pins (non-destructive to pins file)
+    global ALLOWED_EMAILS, PIN_MAP
+    ALLOWED_EMAILS = _load_allowed_emails()
+    # Do not regenerate missing pins automatically here; keep existing ones; filter out extras
+    PIN_MAP = { k:v for k,v in PIN_MAP.items() if k in ALLOWED_EMAILS }
+    return jsonify({ 'ok': True, 'allowed': ALLOWED_EMAILS, 'count': len(ALLOWED_EMAILS) })
 
 @app.route('/api/pins/admin')
 def api_pins_admin():
@@ -753,8 +792,13 @@ def saturday_submit():
         return jsonify({ 'ok': False, 'error': 'locked' }), 403
     if not email:
         return jsonify({ 'ok': False, 'error': 'email_required' }), 400
-    if not isinstance(picks, list) or len(picks) != len(SATURDAY_LABELS):
-        return jsonify({ 'ok': False, 'error': 'invalid_picks_length', 'expected': len(SATURDAY_LABELS) }), 400
+    if not isinstance(picks, list):
+        return jsonify({ 'ok': False, 'error': 'invalid_picks_type' }), 400
+    # Allow partial submissions: truncate or pad to length; blanks allowed.
+    if len(picks) > len(SATURDAY_LABELS):
+        picks = picks[:len(SATURDAY_LABELS)]
+    if len(picks) < len(SATURDAY_LABELS):
+        picks = picks + [''] * (len(SATURDAY_LABELS) - len(picks))
     if email not in ALLOWED_EMAILS:
         return jsonify({ 'ok': False, 'error': 'unauthorized_email' }), 403
     if not _check_pin(email, pin):

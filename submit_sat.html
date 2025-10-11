@@ -130,7 +130,7 @@ async function savePicks(){
   if(pin.length!==4){ status.textContent='Enter 4-digit PIN'; status.className='error'; return; }
   const inputs = Array.from(document.querySelectorAll('input[data-idx]'));
   const picks = inputs.map(inp=> (inp.value||'').trim().toUpperCase());
-  if(picks.some(p=>!p)){ status.textContent='Select all picks'; status.className='error'; return; }
+  // Partial submission allowed: user can submit subset; blanks retained server-side.
   status.textContent='Saving...'; status.className='';
   try {
     const r = await fetch('/api/picks/saturday/submit',{method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ email, pin, picks })});
