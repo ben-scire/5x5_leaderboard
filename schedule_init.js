@@ -182,6 +182,32 @@
       } catch(err){ console.warn('[ScheduleInit] Friday fallback repair failed', err); }
     }, 1200);
 
+    // --- Manual explicit injection for missing Friday users (user request) ---
+    try {
+      if(!userPicks['Fri']) userPicks['Fri'] = {};
+      const manualFri = {
+        'wyaggy3@gmail.com': ['USF','WASH'],
+        'goodnoughdylan@gmail.com': ['UNT','WASH']
+      };
+      let changed=false;
+      Object.keys(manualFri).forEach(email=>{
+        const have = userPicks['Fri'][email];
+        if(!have || have.every(x=>!x)){
+          userPicks['Fri'][email] = manualFri[email];
+          // Ensure user object exists
+          if(Array.isArray(users) && !users.find(u=>u.username===email)){
+            users.push({ username:email, thurs:0,fri:0,sat:0,sun:0,mon:0,total:0 });
+          }
+          changed=true;
+        }
+      });
+      if(changed && typeof recalcPoints==='function'){
+        recalcPoints('Fri'); recalcTotal && recalcTotal(); updateLeaderboard && updateLeaderboard();
+        if(typeof renderPicksTable==='function' && picksDay==='Fri') renderPicksTable('Fri');
+        console.log('[ScheduleInit] Manually injected Friday picks for missing users');
+      }
+    } catch(e){ console.warn('[ScheduleInit] manual Friday injection failed', e); }
+
     // Secondary backfill: ensure every leaderboard email has Friday picks if present server-side.
     setTimeout(async () => {
       try {
