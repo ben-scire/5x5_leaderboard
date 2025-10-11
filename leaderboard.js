@@ -350,10 +350,11 @@ function updateLeaderboard(){
   users.forEach((u,i)=>{
     u.thurs = thursActual[i];
     u.fri   = friActual[i];
-    u.sat   = satActual[i];
+    // Hide Saturday contribution for now so leaderboard doesn't leak count of correct picks yet.
+    u.sat   = 0; // satActual[i];
     u.sun   = sunActual[i];
     u.mon   = monActual[i];
-    u.total = thursActual[i] + friActual[i] + satActual[i] + sunActual[i] + monActual[i];
+  u.total = thursActual[i] + friActual[i] /* + satActual[i] */ + sunActual[i] + monActual[i];
     delete u._thursProj; delete u._friProj; delete u._satProj; delete u._sunProj; delete u._monProj; delete u._projTotal;
   });
 
@@ -431,6 +432,23 @@ function updateLeaderboard(){
   // Update legend for Live* dataset
   // Removed Live* legend chip logic.
 }
+
+// Admin helper: call window.revealSaturday() in console once it's time to show Saturday picks & scoring.
+window.revealSaturday = function(){
+  try {
+    users.forEach(u=>{ u.sat = (userPicks['Sat'] && userPicks['Sat'][u.username]) ? 0 : 0; });
+    // Recompute with real Saturday points now
+    users.forEach((u,i)=>{ u.sat = (function pointsForDay(day,user){
+      const picks = (userPicks[day] && userPicks[day][user.username]) || [];
+      const covers = coveredPicks[day] || [];
+      let pts=0; covers.forEach((c,i)=>{ if(!c || c==='PUSH') return; const pick=picks[i]; if(pick && picksMatch(pick,c)) pts++; });
+      return pts; })( 'Sat', u); });
+    users.forEach(u=>{ u.total = (u.thurs||0)+(u.fri||0)+(u.sat||0)+(u.sun||0)+(u.mon||0); });
+    updateLeaderboard();
+    if(picksDay==='Sat') renderPicksTable('Sat');
+    console.log('[Reveal] Saturday picks and points revealed.');
+  } catch(e){ console.warn('Reveal Saturday failed', e); }
+};
 
 /* ============= Table Renders ============= */
 // Build a map of canonical team names -> abbreviations for display in picks table
@@ -521,7 +539,7 @@ function liveGameCoverInfo(day, idx){
   return { coverAbbr, inProgress:true, progress };
 }
 
-function renderPicksTable(day=currentDay){
+function renderPicksTable(day=picksDay){
   // Requirement update: show scheduled games for Sat-Sun-Mon again (no kickoff-based hiding). Always render all defined columns for selected day.
   const tbl = document.getElementById('picksTable');
   // Empty-state: if no users at all for the selected day, show a friendly hint instead of a totally blank table
@@ -529,6 +547,15 @@ function renderPicksTable(day=currentDay){
   if(userCount===0){
     tbl.innerHTML = '<tr><th class="th-small">Player</th><th class="th-small">Picks</th></tr>'+
       '<tr><td colspan="2" style="text-align:center;padding:14px 10px;font-size:13px;color:#9fb2bf;">No '+day+' submissions yet. <a href="submit_thurs.html" style="color:#66ffa6;">Submit yours</a> to appear here.</td></tr>';
+    return;
+  }
+  // --- Saturday privacy: hide all Saturday picks until day is locked/final ---
+  // We still keep userPicks['Sat'] populated internally for scoring later, but we do not
+  // render individual selections to prevent copying.
+  if(day==='Sat'){
+    const rows = users.map(u=> `<tr><td>${abbrevUser(u)}</td><td style="text-align:center;opacity:0.65;">Hidden</td></tr>`).join('');
+    tbl.innerHTML = '<tr><th class="th-small">Player</th><th class="th-small">Saturday Picks</th></tr>' +
+      '<tr><td colspan="2" style="text-align:center;padding:6px 10px;font-size:12px;color:#9fb2bf;">Saturday picks are hidden until results are posted.</td></tr>' + rows;
     return;
   }
   let labelCount = (picksLabels[day]||[]).length;
