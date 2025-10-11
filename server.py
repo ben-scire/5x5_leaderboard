@@ -214,12 +214,14 @@ SATURDAY_LABELS = [
 # For now eventIds unknown/placeholder; can be updated later with real ESPN IDs.
 # lineHome semantics: negative => home favored by abs(line); positive => away favored by that amount.
 SATURDAY_SCHEDULE = [
-    { 'sport':'NCAAF', 'eventId': None, 'away':'Ohio State', 'awayAbbr':'OHST', 'home':'Illinois', 'homeAbbr':'ILL', 'lineHome': +15.5, 'total': None, 'start':'2025-10-11T16:00:00Z' },
-    { 'sport':'NCAAF', 'eventId': None, 'away':'Alabama', 'awayAbbr':'ALA', 'home':'Missouri', 'homeAbbr':'MIZ', 'lineHome': +3.5, 'total': None, 'start':'2025-10-11T16:00:00Z' },
-    { 'sport':'NCAAF', 'eventId': None, 'away':'Indiana', 'awayAbbr':'IND', 'home':'Oregon', 'homeAbbr':'ORE', 'lineHome': -7.5, 'total': None, 'start':'2025-10-11T19:30:00Z' },
-    { 'sport':'NCAAF', 'eventId': None, 'away':'Oklahoma', 'awayAbbr':'OKLA', 'home':'Texas', 'homeAbbr':'TEX', 'lineHome': -2.5, 'total': None, 'start':'2025-10-11T19:30:00Z' },
-    { 'sport':'NCAAF', 'eventId': None, 'away':'Georgia', 'awayAbbr':'UGA', 'home':'Auburn', 'homeAbbr':'AUB', 'lineHome': +4.5, 'total': None, 'start':'2025-10-11T23:30:00Z' },
-    { 'sport':'NCAAF', 'eventId': None, 'away':'BYU', 'awayAbbr':'BYU', 'home':'Arizona', 'homeAbbr':'ARIZ', 'lineHome': +2.5, 'total': None, 'start':'2025-10-12T00:00:00Z' }
+    # Added real ESPN event IDs for the two noon (16:00Z) games so live fetch works immediately.
+    { 'sport':'NCAAF', 'eventId': '401752865', 'away':'Ohio State', 'awayAbbr':'OHST', 'home':'Illinois', 'homeAbbr':'ILL', 'lineHome': +15.5, 'total': None, 'start':'2025-10-11T16:00:00Z' },
+    { 'sport':'NCAAF', 'eventId': '401752734', 'away':'Alabama', 'awayAbbr':'ALA', 'home':'Missouri', 'homeAbbr':'MIZ', 'lineHome': +3.5, 'total': None, 'start':'2025-10-11T16:00:00Z' },
+    # Remaining games now updated with ESPN event IDs for live tracking.
+    { 'sport':'NCAAF', 'eventId': '401752870', 'away':'Indiana', 'awayAbbr':'IND', 'home':'Oregon', 'homeAbbr':'ORE', 'lineHome': -7.5, 'total': None, 'start':'2025-10-11T19:30:00Z' },
+    { 'sport':'NCAAF', 'eventId': '401752736', 'away':'Oklahoma', 'awayAbbr':'OKLA', 'home':'Texas', 'homeAbbr':'TEX', 'lineHome': -2.5, 'total': None, 'start':'2025-10-11T19:30:00Z' },
+    { 'sport':'NCAAF', 'eventId': '401752867', 'away':'Georgia', 'awayAbbr':'UGA', 'home':'Auburn', 'homeAbbr':'AUB', 'lineHome': +4.5, 'total': None, 'start':'2025-10-11T23:30:00Z' },  # Verify 401752867 (ABC 23:30Z)
+    { 'sport':'NCAAF', 'eventId': '401756916', 'away':'BYU', 'awayAbbr':'BYU', 'home':'Arizona', 'homeAbbr':'ARIZ', 'lineHome': +2.5, 'total': None, 'start':'2025-10-12T00:00:00Z' }
 ]
 
 # Saturday storage paths
@@ -303,25 +305,80 @@ def _load_saturday_lock_status():
 
 SATURDAY_PICKS = _load_saturday()
 
+# --- CSV authoritative rebuild (new) ---
+# Saturday should now derive its live/authoritative state from the CSV log (latest row per email),
+# not from the JSON snapshot. We still keep the JSON snapshot for durability / restart speed, but
+# whenever the CSV log changes we rebuild SATURDAY_PICKS in-memory from it.
+_SATURDAY_CSV_MTIME = SATURDAY_CSV_LOG.stat().st_mtime if SATURDAY_CSV_LOG.exists() else None
+
+def _snapshot_latest_saturday_from_log():
+    if not SATURDAY_CSV_LOG.exists():
+        return SATURDAY_PICKS.copy()
+    latest = {}
+    try:
+        with SATURDAY_CSV_LOG.open('r', encoding='utf-8') as f:
+            lines = f.read().strip().splitlines()
+        if not lines:
+            return SATURDAY_PICKS.copy()
+        for line in lines[1:]:  # skip header
+            if not line.strip():
+                continue
+            parts = line.split(',')
+            # ts_iso,email,pick1..pick6
+            if len(parts) < 2 + len(SATURDAY_LABELS):
+                # tolerate short lines (pad later)
+                pass
+            email = parts[1].strip().lower()
+            picks_part = parts[2:2+len(SATURDAY_LABELS)]
+            picks = [p.strip().upper() for p in picks_part]
+            # Pad/truncate
+            if len(picks) < len(SATURDAY_LABELS):
+                picks += [''] * (len(SATURDAY_LABELS)-len(picks))
+            if len(picks) > len(SATURDAY_LABELS):
+                picks = picks[:len(SATURDAY_LABELS)]
+            latest[email] = picks
+        return latest
+    except Exception:
+        return SATURDAY_PICKS.copy()
+
 # --- Hot reload support (mtime-based) for Saturday picks ---
 _SATURDAY_FILE_MTIME = SATURDAY_FILE.stat().st_mtime if SATURDAY_FILE.exists() else None
 
 def _maybe_reload_saturday():
-    global SATURDAY_PICKS, _SATURDAY_FILE_MTIME
+    """Reload Saturday picks if either the JSON snapshot OR the CSV log changed.
+
+    Priority order:
+      1. If CSV log mtime changed -> rebuild from CSV (authoritative)
+      2. Else if JSON snapshot changed -> load JSON (fallback / durability)
+    """
+    global SATURDAY_PICKS, _SATURDAY_FILE_MTIME, _SATURDAY_CSV_MTIME
+    reloaded = False
     try:
-        if not SATURDAY_FILE.exists():
-            return False
-        mtime = SATURDAY_FILE.stat().st_mtime
-        if _SATURDAY_FILE_MTIME is None or mtime > _SATURDAY_FILE_MTIME:
-            data = _load_saturday()
-            if isinstance(data, dict) and data != SATURDAY_PICKS:
-                SATURDAY_PICKS = data
-            _SATURDAY_FILE_MTIME = mtime
-            _refresh_all_users()
-            return True
+        # CSV first
+        if SATURDAY_CSV_LOG.exists():
+            csv_mtime = SATURDAY_CSV_LOG.stat().st_mtime
+            if _SATURDAY_CSV_MTIME is None or csv_mtime > _SATURDAY_CSV_MTIME:
+                latest = _snapshot_latest_saturday_from_log()
+                if isinstance(latest, dict):
+                    SATURDAY_PICKS = latest
+                    # Keep JSON snapshot in sync (best-effort, ignore failure)
+                    _save_saturday(SATURDAY_PICKS)
+                    _SATURDAY_CSV_MTIME = csv_mtime
+                    reloaded = True
+        # JSON fallback (only if we did not just rebuild from CSV)
+        if not reloaded and SATURDAY_FILE.exists():
+            json_mtime = SATURDAY_FILE.stat().st_mtime
+            if _SATURDAY_FILE_MTIME is None or json_mtime > _SATURDAY_FILE_MTIME:
+                data = _load_saturday()
+                if isinstance(data, dict):
+                    SATURDAY_PICKS = data
+                _SATURDAY_FILE_MTIME = json_mtime
+                reloaded = True
     except Exception:
         pass
-    return False
+    if reloaded:
+        _refresh_all_users()
+    return reloaded
 
 # ---- Per-game locking (Saturday) ----
 # New granular locking replaces the prior whole-day locking workflow for Saturday.
@@ -742,6 +799,8 @@ def friday_log_latest():
 
 def compute_scores():
     """Return sorted list of scoreboard entries for all users (Thu + Fri + Sat + Sun)."""
+    # Ensure we are using latest Saturday CSV data before scoring
+    _maybe_reload_saturday()
     entries = []
     for email in ALL_USERS:
         # Thursday
@@ -860,6 +919,7 @@ def api_picks_public():
         })
     if day.startswith('sat'):
         now = int(time.time()*1000)
+        _maybe_reload_saturday()
         return jsonify({
             'ok': True,
             'entries': { email: { 'picks': picks, 'ts': now } for email, picks in SATURDAY_PICKS.items() }
