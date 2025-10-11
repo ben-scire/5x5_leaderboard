@@ -625,7 +625,7 @@ function renderPicksTable(day=picksDay){
   // --- Saturday privacy: hide all Saturday picks until day is locked/final ---
   // We still keep userPicks['Sat'] populated internally for scoring later, but we do not
   // render individual selections to prevent copying.
-  if(day==='Sat'){
+  if(day==='Sat' && window.SATURDAY_PUBLIC!==true){
     // Partial reveal logic: if partialSatRevealCount defined and < total columns, show first N picks, mask remainder.
     const totalCols = (picksLabels['Sat']||[]).length;
     const revealN = Math.min(window.partialSatRevealCount||0, totalCols);
