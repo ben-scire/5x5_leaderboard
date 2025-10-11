@@ -58,6 +58,15 @@
 
   ['Thu','Fri','Sat','Sun','Mon'].forEach(applyDay);
 
+    // If Friday picks labels came through but fridayGames ended empty (unexpected), rebuild from FRIDAY_SCHEDULE snapshot in payload.
+    if((!Array.isArray(window.fridayGames) || !window.fridayGames.length) && days['Fri'] && Array.isArray(days['Fri'].games)){
+      window.fridayGames = (days['Fri'].games||[]).map(g=>({
+        eventId:g.eventId, away:g.away, awayAbbr:g.awayAbbr, home:g.home, homeAbbr:g.homeAbbr, lineHome:g.lineHome, total:g.total
+      }));
+      window.fridayStates = window.fridayGames.map(g=>({ status:'STATUS_SCHEDULED', score:'0-0', home:0, away:0, period:0, clock:'', startTimeStr:g.start||'', meta:{ home:{abbr:g.homeAbbr}, away:{abbr:g.awayAbbr} } }));
+      window.fridayStartTimes = window.fridayGames.map(g=> g.start || '');
+    }
+
     // Pre-create covered arrays for new days if not set
     ['Fri','Sat','Sun','Mon'].forEach(d=>{ if(!Array.isArray(coveredPicks[d])) coveredPicks[d] = Array((picksLabels[d]||[]).length).fill(null); });
 
@@ -83,5 +92,7 @@
     }
 
     console.log('[ScheduleInit] Loaded schedule version', payload.version, 'days:', Object.keys(days));
+    // Trigger scoreboard refresh now that schedule is ready
+    if(typeof updateScoreboard==='function') try { updateScoreboard(); } catch(_e){}
   } catch(err){ console.warn('[ScheduleInit] Fatal error', err); }
 })();
