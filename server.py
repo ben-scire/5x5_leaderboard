@@ -246,14 +246,33 @@ def _load_friday_lock_status():
             return { 'locked': True }
     return { 'locked': False }
 
+def _merge_seed_into_friday(existing: dict):
+    """Merge any missing emails from the CSV seed into existing picks (without overwriting current picks)."""
+    seed = _seed_friday_from_csv()
+    if not seed:
+        return existing, False
+    changed = False
+    for email, picks in seed.items():
+        if email not in existing:
+            existing[email] = picks
+            changed = True
+    if changed:
+        _save_friday(existing)
+    return existing, changed
+
 _seeded_csv = _seed_friday_from_csv()
-FRIDAY_PICKS = _seeded_csv if _seeded_csv else _load_friday()  # email -> list[str]
-if _seeded_csv:
-    # Persist the seeded data into friday_picks.json so endpoints reflect it even if CSV removed later.
-    try:
-        _save_friday(FRIDAY_PICKS)
-    except Exception:
-        pass
+FRIDAY_PICKS = _seeded_csv if _seeded_csv else _load_friday()  # initial load
+# Always perform a merge to ensure any newly added CSV rows appear even after prior submissions
+FRIDAY_PICKS, _merged = _merge_seed_into_friday(FRIDAY_PICKS)
+
+@app.route('/api/admin/friday/seed', methods=['POST'])
+def admin_friday_seed():
+    """Admin endpoint: re-run CSV merge to backfill any missing rows from Fri_Picks.csv."""
+    global FRIDAY_PICKS
+    before = len(FRIDAY_PICKS)
+    FRIDAY_PICKS, changed = _merge_seed_into_friday(FRIDAY_PICKS)
+    after = len(FRIDAY_PICKS)
+    return jsonify({ 'ok': True, 'changed': changed, 'countBefore': before, 'countAfter': after })
 
 @app.route('/api/picks/friday/labels')
 def friday_labels():

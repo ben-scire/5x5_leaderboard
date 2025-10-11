@@ -23,17 +23,39 @@
 // dynamic game objects are not present/loaded). This guarantees a scoreboard
 // row with actual final scores instead of a blank table.
 // NOTE: Thursday NFL: Miami @ Buffalo final 21-31 (BUF wins, MIA covers +11.5, total 52 > 50.5 => Over)
-// Friday CFB finals: Tulsa @ Oklahoma State 19-12 (Tulsa wins & covers), Iowa @ Rutgers 38-28 (Iowa wins & covers)
-// Lines/totals for Friday not provided -> leave null so we render blanks.
+// Updated static finals placeholder (only used if schedule fetch fails): NCAAF USF @ UNT and Rutgers @ Washington
 const finalResults = {
   'Thu': [
-    { awayAbbr:'MIA', homeAbbr:'BUF', awayScore:21, homeScore:31, lineHome:-11.5, total:50.5 }
+    { awayAbbr:'PHI', homeAbbr:'NYG', awayScore:0, homeScore:0, lineHome:7.5, total:40.5 }
   ],
   'Fri': [
-    { awayAbbr:'TLSA', homeAbbr:'OKST', awayScore:19, homeScore:12, lineHome:null, total:null },
-    { awayAbbr:'IOWA', homeAbbr:'RUT', awayScore:38, homeScore:28, lineHome:null, total:null }
+    { awayAbbr:'USF', homeAbbr:'UNT', awayScore:0, homeScore:0, lineHome:-1.5, total:null },
+    { awayAbbr:'RUT', homeAbbr:'WASH', awayScore:0, homeScore:0, lineHome:-10.5, total:null }
   ]
 };
+
+// Hydrate Friday picks immediately if public endpoint already has entries (covers issue with users missing on load)
+(async function hydrateFridayPicksEarly(){
+  try {
+    const r = await fetch('/api/picks/public?day=Fri',{cache:'no-store'});
+    if(!r.ok) return; const j = await r.json(); const entries = (j&&j.entries)||{};
+    Object.keys(entries).forEach(email=>{
+      if(!userPicks.Fri[email]){
+        const arr = entries[email].picks || [];
+        const needed = picksLabels.Fri.length || 2;
+        let adj = arr.slice(0, needed);
+        while(adj.length < needed) adj.push('');
+        userPicks.Fri[email] = adj;
+        // Ensure user object exists for leaderboard
+        if(!users.find(u=>u.username===email)){
+          users.push({ username:email, thurs:0,fri:0,sat:0,sun:0,mon:0,total:0 });
+        }
+      }
+    });
+    if(typeof renderPicksTable==='function') renderPicksTable('Fri');
+    if(typeof updateLeaderboard==='function') updateLeaderboard();
+  } catch(e){ /* silent */ }
+})();
 
 function abbrevUser(u){ return nicknameMap[u.username] || u.username.split('@')[0]; }
 // Determine which side is covering given a home-based spread (negative => home favored, positive => away favored)
