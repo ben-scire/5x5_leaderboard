@@ -11,53 +11,27 @@ FRIDAY_RESULTS = ['USF', 'WASH']
 # Saturday results placeholder (filled when games final). Length = 6 games
 SATURDAY_RESULTS = [None]*6
 
-# Hard-coded authoritative picks (email -> list[str]); may be overridden by file
-HARD_PICKS = {
-    "kylejkz11@gmail.com": ["NYG", "OVER", "YES"],
-    "max1solov@gmail.com": ["NYG", "OVER", "YES"],
-    "samuel.lehman3337@gmail.com": ["PHI", "OVER", "YES"],
-    "shawnscottcarl@gmail.com": ["PHI", "OVER", "YES"],
-    "finsmaniac1551@gmail.com": ["PHI", "OVER", "NO"],
-    "jakelehman100@gmail.com": ["NYG", "OVER", "YES"],
-    "hankrudden@yahoo.com": ["NYG", "UNDER", "NO"],
-    "scire.ben@gmail.com": ["NYG", "OVER", "YES"],
-    "williamjabbott22@gmail.com": ["PHI", "OVER", "YES"],
-    "timjbohlman@gmail.com": ["NYG", "OVER", "YES"],
-    "goodnoughdylan@gmail.com": ["NYG", "UNDER", "YES"],
-    "jaked9577@yahoo.com": ["PHI", "OVER", "YES"],
-    "sam.scire@hotmail.com": ["PHI", "OVER", "YES"],
-    "soligonaustin@outlook.com": ["PHI", "OVER", "YES"],
-    "amacdonald171@gmail.com": ["PHI", "OVER", "YES"],
-    "jlindsey3428@gmail.com": ["NYG", "OVER", "YES"],
-    "wyaggy3@gmail.com": ["PHI", "UNDER", "YES"]
-} 
-
+# Authoritative Thursday picks now fully external in data/picks/thursday_picks.json (no embedded fallback)
 DATA_OVERRIDE_PATH = pathlib.Path('data/picks/thursday_picks.json')
-
-def _load_override():
-    if DATA_OVERRIDE_PATH.exists():
-        try:
+def _load_thursday():
+    try:
+        if DATA_OVERRIDE_PATH.exists():
             with DATA_OVERRIDE_PATH.open('r', encoding='utf-8') as f:
                 data = json.load(f)
             if isinstance(data, dict):
                 cleaned = {}
                 for k,v in data.items():
                     if isinstance(v, list) and len(v) == len(RESULTS):
-                        cleaned[k] = [str(x).strip().upper() for x in v]
-                if cleaned:
-                    return cleaned
-        except Exception:
-            pass
-    return None
+                        cleaned[k.lower()] = [str(x).strip().upper() for x in v]
+                return cleaned
+    except Exception:
+        pass
+    return {}
 
-_override = _load_override()
-if _override:
-    HARD_PICKS = _override  # type: ignore
-    SOURCE = 'file'
-else:
-    SOURCE = 'embedded'
+HARD_PICKS = _load_thursday()
+SOURCE = 'file' if HARD_PICKS else 'empty'
 
-ALL_USERS = sorted(HARD_PICKS.keys())
+ALL_USERS = sorted(HARD_PICKS.keys()) if HARD_PICKS else []
 
 # ---- PIN system (simple 4-digit per email) ----
 PINS_FILE = pathlib.Path('data/picks/pins.json')
