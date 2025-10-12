@@ -145,6 +145,13 @@ function _norm(raw){
   s = s.replace(/^tex$/,'texas');
   s = s.replace(/^uga$/,'georgia');
   s = s.replace(/^ind$/,'indiana');
+  // Additional Saturday abbreviation canonicalizations to mirror server _norm_team aliases
+  s = s.replace(/^ohst$/,'ohio state'); // ESPN awayAbbr for Ohio State
+  s = s.replace(/^ore$/,'oregon');
+  s = s.replace(/^okla$/,'oklahoma');
+  s = s.replace(/^aub$/,'auburn');
+  s = s.replace(/^ariz$/,'arizona');
+  s = s.replace(/^byu$/,'byu'); // no-op but ensures uniform casing
   s = s.replace(/sc ?ar|s ?car|south car\b/g,'south carolina');
   s = s.replace(/miami(?![a-z])/,'miami');
   // New broader Saturday specific mappings
