@@ -3,7 +3,7 @@
 from flask import Flask, jsonify, send_from_directory, request
 import time, os, json, pathlib
 
-VERSION = 'week-multi-13'  # server-side Saturday backfill for first two games & alias expansion
+VERSION = 'week-multi-14'  # cache bust: confirm Saturday results OSU / MIZZOU / INDIANA
 # Always treat Saturday JSON snapshot as authoritative; ignore CSV log auto-rebuilds.
 FORCE_SATURDAY_JSON = True  # previously env-driven; now permanently enabled
 RUNTIME_FORCE_SATURDAY_JSON = True  # runtime flag also locked on so reload logic always prefers JSON
@@ -789,7 +789,7 @@ def _norm_team(val: str):
     v = val.strip().upper()
     # Fast path exact matches already canonical
     canonical = {
-        'OHIO ST','MISSOURI','ILLINOIS','ALABAMA','INDIANA','OREGON','OKLAHOMA','TEXAS','GEORGIA','AUBURN','BYU','ARIZONA'
+        'OHIO STATE','MISSOURI','ILLINOIS','ALABAMA','INDIANA','OREGON','OKLAHOMA','TEXAS','GEORGIA','AUBURN','BYU','ARIZONA'
     }
     if v in canonical:
         return v
