@@ -102,6 +102,20 @@ function normalizeNFLAbbr(abbr){
   if(up==='WSH' || up==='WAS' || up==='WASH') return 'WSH';
   return up;
 }
+// Core pick vs cover comparison (normalization-aware). Added after removal of earlier helper.
+function picksMatch(a,b){
+  if(a==null || b==null) return false;
+  // Direct fast path
+  if(a===b) return true;
+  const na = _norm(a);
+  const nb = _norm(b);
+  if(na && nb && na===nb) return true;
+  // Abbreviation fallback (e.g., comparing OHIO ST vs Ohio State via table abbrev map)
+  const la = lookupAbbr(a);
+  const lb = lookupAbbr(b);
+  if(la===lb) return true;
+  return false;
+}
 // Normalize existing Saturday covered picks
 // NOTE: Week Thursday picks are static & locked (see config.js userPicks['Thu']).
 coveredPicks['Sat'] = coveredPicks['Sat'].map(c=> (c && c!=='PUSH') ? canonicalTeamName(c) : c);
