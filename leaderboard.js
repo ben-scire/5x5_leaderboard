@@ -476,6 +476,28 @@ try {
   }
 } catch(_e){ console.warn('[Sat Finals] apply failed', _e); }
 
+// Hard normalization pass: upgrade any raw user pick spelled exactly 'OHIO ST' to 'OHIO STATE'
+function normalizeOhioStatePicks(){
+  try {
+    if(!userPicks || !userPicks.Sat) return;
+    let changed=false;
+    Object.keys(userPicks.Sat).forEach(email=>{
+      const arr = userPicks.Sat[email];
+      if(Array.isArray(arr)){
+        for(let i=0;i<arr.length;i++){
+          if(arr[i]==='OHIO ST') { arr[i]='OHIO STATE'; changed=true; }
+        }
+      }
+    });
+    if(changed){
+      recalcPoints('Sat'); recalcTotal(); updateLeaderboard();
+      if(picksDay==='Sat' && typeof renderPicksTable==='function') renderPicksTable('Sat');
+      console.log('[Normalization] Upgraded OHIO ST -> OHIO STATE in user picks');
+    }
+  } catch(e){ /* silent */ }
+}
+normalizeOhioStatePicks();
+
 // Robust post-load enforcement & blank pick repair for Saturday
 function enforceSaturdayFinals(){
   const finals = ['Ohio State','Missouri','Indiana','Texas','Georgia','BYU'];
@@ -506,6 +528,8 @@ async function fixSaturdayBlanks(){
         if(server[1]) picks[1] = server[1];
       }
     });
+    // Apply normalization after any backfill/shift operations
+    normalizeOhioStatePicks();
     recalcPoints('Sat'); recalcTotal(); updateLeaderboard(); if(picksDay==='Sat') renderPicksTable('Sat');
     console.log('[Sat Fix] Blank first-two picks backfilled where possible');
   } catch(e){ console.warn('[Sat Fix] failed', e); }
