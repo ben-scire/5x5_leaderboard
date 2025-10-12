@@ -247,6 +247,27 @@ window.setCovered = function(day, results){
 /* ============= Leaderboard (Chart.js) ============= */
 let chart, chartInitialized=false;
 let satPatternCache = null; // cache for Saturday stripe pattern
+// Manual Saturday score overrides (authoritative) to bypass client-side mis-scaling issue.
+// Values intentionally in 2..5 range per requirement (floor raised where raw calc was 1).
+const manualSatScores = {
+  'jlindsey3428@gmail.com': 2,
+  'kylejkz11@gmail.com': 3,
+  'timjbohlman@gmail.com': 3,
+  'amacdonald171@gmail.com': 3,
+  'samuel.lehman3337@gmail.com': 3,
+  'williamjabbott22@gmail.com': 3,
+  'goodnoughdylan@gmail.com': 5,
+  'scire.ben@gmail.com': 4,
+  'jaked9577@yahoo.com': 2,
+  'sam.scire@hotmail.com': 4,
+  'shawnscottcarl@gmail.com': 3,
+  'max1solov@gmail.com': 3,
+  'wyaggy3@gmail.com': 2,
+  'finsmaniac1551@gmail.com': 3,
+  'soligonaustin@outlook.com': 2,
+  'jakelehman100@gmail.com': 2,
+  'hankrudden@yahoo.com': 2
+};
 // High-contrast colors for clearer separation between day segments
 // Previous palette used three similar blue shades; replaced with blue / green / orange.
 const DAY_COLORS = {
@@ -330,10 +351,13 @@ function updateLeaderboard(){
   users.forEach((u,i)=>{
     u.thurs = thursActual[i];
     u.fri   = friActual[i];
-    u.sat   = satActual[i]; // show Saturday points immediately
-    u.sun   = sunActual[i]; // show Sunday points (can hide later if desired)
+    const rawSat = satActual[i];
+    // Apply manual override if present; clamp to 0..6 safeguard.
+    const overrideSat = manualSatScores[u.username] != null ? manualSatScores[u.username] : rawSat;
+    u.sat   = Math.min(6, Math.max(0, overrideSat));
+    u.sun   = sunActual[i];
     u.mon   = monActual[i];
-    u.total = thursActual[i] + friActual[i] + satActual[i] + sunActual[i] + monActual[i];
+    u.total = u.thurs + u.fri + u.sat + u.sun + u.mon;
     delete u._thursProj; delete u._friProj; delete u._satProj; delete u._sunProj; delete u._monProj; delete u._projTotal;
   });
 
