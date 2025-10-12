@@ -3,7 +3,7 @@
 from flask import Flask, jsonify, send_from_directory, request
 import time, os, json, pathlib
 
-VERSION = 'week-multi-12'  # stronger Saturday finals enforcement & blank pick backfill
+VERSION = 'week-multi-13'  # server-side Saturday backfill for first two games & alias expansion
 # Always treat Saturday JSON snapshot as authoritative; ignore CSV log auto-rebuilds.
 FORCE_SATURDAY_JSON = True  # previously env-driven; now permanently enabled
 RUNTIME_FORCE_SATURDAY_JSON = True  # runtime flag also locked on so reload logic always prefers JSON
@@ -325,6 +325,30 @@ def _enforce_full_saturday():
         except Exception: pass
 
 _enforce_full_saturday()
+
+# --- Server-side backfill: ensure specified users have at least first two Saturday picks visible.
+_SAT_BACKFILL_TARGETS = [
+    'finsmaniac1551@gmail.com',
+    'jlindsey3428@gmail.com',
+    'samuel.lehman3337@gmail.com'
+]
+def _apply_saturday_backfill():
+    changed=False
+    for em in _SAT_BACKFILL_TARGETS:
+        picks = SATURDAY_PICKS.get(em)
+        if not picks:
+            # create blank row then rely on client or manual later
+            SATURDAY_PICKS[em] = ['']*len(SATURDAY_LABELS)
+            picks = SATURDAY_PICKS[em]
+            changed=True
+        # If first two are blank but user has later picks or result finals known, leave blanks (means no submission) – here we only ensure list exists.
+        if len(picks) < len(SATURDAY_LABELS):
+            while len(picks) < len(SATURDAY_LABELS): picks.append('')
+            changed=True
+    if changed:
+        try: _save_saturday(SATURDAY_PICKS)
+        except Exception: pass
+_apply_saturday_backfill()
 
 # --- CSV authoritative rebuild (new) ---
 # Saturday should now derive its live/authoritative state from the CSV log (latest row per email),
@@ -784,6 +808,10 @@ def _norm_team(val: str):
         'AUB':'AUBURN',
         'ARIZ':'ARIZONA'
     }
+    # Additional single-word ESPN-style abbreviations fallback
+    if v == 'OHIO ST': return 'OHIO STATE'
+    if v == 'MIZ': return 'MISSOURI'
+    if v == 'IND': return 'INDIANA'
     # Exact token replacement (preserve ordering of multi-word names)
     parts = v.replace('&',' ').replace('.',' ').split()
     for i,p in enumerate(parts):
