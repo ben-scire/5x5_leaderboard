@@ -16,7 +16,7 @@ FRIDAY_RESULTS = ['USF', 'WASH']
 SATURDAY_RESULTS = [
     'OHIO STATE',   # Game 1 final (Ohio State covers -15.5)
     'MISSOURI',     # Game 2 final (Missouri covers +3.5 vs Alabama)
-    'INDIANA',      # Game 3 final (Indiana covers +7.5)
+    'OREGON',       # Game 3 final (Oregon covers -7.5)
     'TEXAS',        # Game 4 final (Texas covers -2.5)
     'GEORGIA',      # Game 5 final (Georgia covers -4.5)
     'BYU'           # Game 6 final (BYU covers -2.5)

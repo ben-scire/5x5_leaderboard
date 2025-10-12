@@ -474,7 +474,7 @@ window.partialSatRevealCount = 4; // expanded reveal: first four Saturday games 
 try {
   if(Array.isArray(coveredPicks['Sat'])){
     // Inject all six finals now that games are complete.
-    const finals = ['Ohio State','Missouri','Indiana','Texas','Georgia','BYU'];
+  const finals = ['Ohio State','Missouri','Oregon','Texas','Georgia','BYU'];
     for(let i=0;i<finals.length;i++){
       if(coveredPicks['Sat'][i] == null || coveredPicks['Sat'][i]==='') coveredPicks['Sat'][i] = finals[i];
     }
