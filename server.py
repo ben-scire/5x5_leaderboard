@@ -3,7 +3,7 @@
 from flask import Flask, jsonify, send_from_directory, request
 import time, os, json, pathlib
 
-VERSION = 'week-multi-14'  # cache bust: confirm Saturday results OSU / MIZZOU / INDIANA
+VERSION = 'week-multi-15'  # repair missing Saturday picks: restore first two games for blank users
 # Always treat Saturday JSON snapshot as authoritative; ignore CSV log auto-rebuilds.
 FORCE_SATURDAY_JSON = True  # previously env-driven; now permanently enabled
 RUNTIME_FORCE_SATURDAY_JSON = True  # runtime flag also locked on so reload logic always prefers JSON
@@ -387,6 +387,40 @@ def _maybe_reload_saturday():
     except Exception:
         pass
     return False
+
+# --- Repair helper: merge any non-blank picks from snapshot file into in-memory SATURDAY_PICKS
+def _repair_saturday_from_file():
+    if not SATURDAY_FILE.exists():
+        return False
+    try:
+        with SATURDAY_FILE.open('r', encoding='utf-8') as f:
+            snapshot = json.load(f)
+        if not isinstance(snapshot, dict):
+            return False
+        changed=False
+        for email, picks in snapshot.items():
+            if not isinstance(picks, list):
+                continue
+            adj = picks[:len(SATURDAY_LABELS)]
+            while len(adj) < len(SATURDAY_LABELS): adj.append('')
+            if email not in SATURDAY_PICKS:
+                SATURDAY_PICKS[email] = [p.strip().upper() for p in adj]
+                changed=True
+                continue
+            cur = SATURDAY_PICKS[email]
+            if len(cur) < len(SATURDAY_LABELS):
+                cur += [''] * (len(SATURDAY_LABELS)-len(cur))
+                changed=True
+            for i,val in enumerate(adj):
+                if val and not cur[i]:
+                    cur[i] = val.strip().upper()
+                    changed=True
+        if changed:
+            _save_saturday(SATURDAY_PICKS)
+            _refresh_all_users()
+        return changed
+    except Exception:
+        return False
 
 # ---- Per-game locking (Saturday) ----
 # New granular locking replaces the prior whole-day locking workflow for Saturday.
@@ -839,6 +873,7 @@ except Exception as _e:
 def compute_scores():
     """Return sorted list of scoreboard entries for all users (Thu + Fri + Sat + Sun) with normalization."""
     _maybe_reload_saturday()  # refresh Saturday picks if JSON snapshot changed
+    _repair_saturday_from_file()  # merge any non-blank picks that are missing in-memory
     entries = []
     for email in ALL_USERS:
         thu_picks = HARD_PICKS[email]
@@ -1215,6 +1250,7 @@ def admin_saturday_score_debug():
     """Return raw vs normalized Saturday picks and results to troubleshoot scoring mismatches.
     Not auth-gated: contains only pick choices already public post-finals.
     """
+    _maybe_reload_saturday(); _repair_saturday_from_file()
     data = []
     for email, picks in SATURDAY_PICKS.items():
         raw = picks
