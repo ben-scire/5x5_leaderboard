@@ -5,6 +5,7 @@ import time, os, json, pathlib
 
 VERSION = 'week-multi-4'  # bumped to force client cache bust (query params) after adding debug + cache headers
 FORCE_SATURDAY_JSON = os.environ.get('FORCE_SATURDAY_JSON', '0') in ('1','true','TRUE','yes','YES')
+RUNTIME_FORCE_SATURDAY_JSON = False  # runtime switch without redeploy
 
 # Final outcomes for the single Thursday game
 RESULTS = ['NYG', 'OVER', 'YES']  # Thursday: spread winner, total, prop
@@ -372,7 +373,7 @@ def _maybe_reload_saturday():
     global SATURDAY_PICKS, _SATURDAY_FILE_MTIME, _SATURDAY_CSV_MTIME
     reloaded = False
     try:
-        if FORCE_SATURDAY_JSON:
+        if FORCE_SATURDAY_JSON or RUNTIME_FORCE_SATURDAY_JSON:
             # Ignore CSV; always reload from JSON snapshot if it changed.
             if SATURDAY_FILE.exists():
                 json_mtime = SATURDAY_FILE.stat().st_mtime
@@ -837,6 +838,15 @@ def _norm_team(val: str):
     v = v.replace('OHIO ST', 'OHIO STATE')
     # Ensure any remaining variants of Missouri map correctly
     v = v.replace('MISSOURI', 'MISSOURI')
+    # Abbreviation expansions (Saturday picks)
+    if v == 'ILL': v = 'ILLINOIS'
+    if v == 'ALA': v = 'ALABAMA'
+    if v == 'IND': v = 'INDIANA'
+    if v == 'ORE': v = 'OREGON'
+    if v == 'OKLA': v = 'OKLAHOMA'
+    if v == 'UGA': v = 'GEORGIA'
+    if v == 'AUB': v = 'AUBURN'
+    if v == 'ARIZ': v = 'ARIZONA'
     v = v.replace('ALABAMA', 'ALABAMA')
     v = v.replace('INDIANA', 'INDIANA')
     v = v.replace('OREGON', 'OREGON')
@@ -1274,6 +1284,29 @@ def admin_saturday_force_json():
         return jsonify({ 'ok': False, 'error': 'persist_failed' }), 500
     _refresh_all_users()
     return jsonify({ 'ok': True, 'count': len(SATURDAY_PICKS), 'forced': True, 'forceEnvActive': FORCE_SATURDAY_JSON })
+
+@app.route('/api/admin/saturday/use_snapshot', methods=['POST'])
+def admin_saturday_use_snapshot():
+    """Admin: Switch to existing saturday_picks.json as authoritative at runtime.
+    Sets RUNTIME_FORCE_SATURDAY_JSON flag and loads snapshot immediately.
+    """
+    token = request.args.get('token') or request.headers.get('X-Admin-Token')
+    admin_token = os.environ.get('ADMIN_TOKEN')
+    if admin_token and token != admin_token:
+        return jsonify({ 'ok': False, 'error': 'forbidden' }), 403
+    global RUNTIME_FORCE_SATURDAY_JSON, SATURDAY_PICKS, _SATURDAY_FILE_MTIME
+    RUNTIME_FORCE_SATURDAY_JSON = True
+    data = _load_saturday()
+    if not isinstance(data, dict) or not data:
+        return jsonify({ 'ok': False, 'error': 'snapshot_empty_or_invalid' }), 500
+    SATURDAY_PICKS = data
+    try:
+        if SATURDAY_FILE.exists():
+            _SATURDAY_FILE_MTIME = SATURDAY_FILE.stat().st_mtime
+    except Exception:
+        pass
+    _refresh_all_users()
+    return jsonify({ 'ok': True, 'runtimeForce': True, 'count': len(SATURDAY_PICKS) })
 
 @app.route('/api/admin/saturday/diagnose')
 def admin_saturday_diagnose():
