@@ -3,7 +3,7 @@
 from flask import Flask, jsonify, send_from_directory, request
 import time, os, json, pathlib
 
-VERSION = 'week-multi-4'  # bumped to force client cache bust (query params) after adding debug + cache headers
+VERSION = 'week-multi-5'  # bump to trigger redeploy & cache bust after Saturday scoring fixes
 # Always treat Saturday JSON snapshot as authoritative; ignore CSV log auto-rebuilds.
 FORCE_SATURDAY_JSON = True  # previously env-driven; now permanently enabled
 RUNTIME_FORCE_SATURDAY_JSON = True  # runtime flag also locked on so reload logic always prefers JSON
@@ -828,6 +828,7 @@ def _norm_team(val: str):
     if v == 'IND': v = 'INDIANA'
     if v == 'ORE': v = 'OREGON'
     if v == 'OKLA': v = 'OKLAHOMA'
+    if v == 'TEX': v = 'TEXAS'
     if v == 'UGA': v = 'GEORGIA'
     if v == 'AUB': v = 'AUBURN'
     if v == 'ARIZ': v = 'ARIZONA'
@@ -1233,6 +1234,21 @@ def admin_saturday_diagnose():
         'blankDetails': blanks,
         'totalUsers': len(SATURDAY_PICKS)
     })
+
+@app.route('/api/admin/saturday/score_debug')
+def admin_saturday_score_debug():
+    """Return raw vs normalized Saturday picks and results to troubleshoot scoring mismatches.
+    Not auth-gated: contains only pick choices already public post-finals.
+    """
+    data = []
+    for email, picks in SATURDAY_PICKS.items():
+        raw = picks
+        norm = [_norm_team(p) for p in picks]
+        res_raw = SATURDAY_RESULTS
+        res_norm = [_norm_team(r) for r in SATURDAY_RESULTS]
+        score = sum(1 for a,b in zip(norm, res_norm) if b and a==b)
+        data.append({ 'email': email, 'raw': raw, 'norm': norm, 'score': score })
+    return jsonify({ 'ok': True, 'count': len(data), 'resultsRaw': SATURDAY_RESULTS, 'resultsNorm': [_norm_team(r) for r in SATURDAY_RESULTS], 'entries': data })
 
 # --- New Saturday per-game lock endpoints ---
 ADMIN_EMAIL = 'scire.ben@gmail.com'  # single admin (adjust if needed)

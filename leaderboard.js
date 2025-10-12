@@ -468,7 +468,8 @@ window.revealSaturday = function(){
 // remaining games stay hidden until full reveal. We introduce a global counter
 // partialSatRevealCount controlling how many leading Saturday pick indices are public.
 // Default to 2 (first two games live) for this week.
-window.partialSatRevealCount = 4; // expanded reveal: first four Saturday games now visible (Oregon & Texas games added)
+// All Saturday games final: force full reveal immediately.
+window.partialSatRevealCount = (picksLabels['Sat']||[]).length;
 
 // Inject known Saturday finals (first two games) so hits/misses color immediately.
 try {
@@ -480,8 +481,9 @@ try {
     }
     // Ensure full reveal when all finals known.
     if(Array.isArray(picksLabels['Sat'])) window.partialSatRevealCount = picksLabels['Sat'].length;
-    // Recalculate points for already revealed portion
-    recalcPoints('Sat');
+  // Recalculate points for full slate now that all finals known
+  window.partialSatRevealCount = (picksLabels['Sat']||[]).length;
+  recalcPoints('Sat');
     recalcTotal();
     updateLeaderboard();
     if(picksDay==='Sat') renderPicksTable('Sat');
