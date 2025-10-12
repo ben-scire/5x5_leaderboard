@@ -3,7 +3,7 @@
 from flask import Flask, jsonify, send_from_directory, request
 import time, os, json, pathlib
 
-VERSION = 'week-multi-15'  # repair missing Saturday picks: restore first two games for blank users
+VERSION = 'week-multi-17'  # add admin force refill endpoint for Saturday first two games
 # Always treat Saturday JSON snapshot as authoritative; ignore CSV log auto-rebuilds.
 FORCE_SATURDAY_JSON = True  # previously env-driven; now permanently enabled
 RUNTIME_FORCE_SATURDAY_JSON = True  # runtime flag also locked on so reload logic always prefers JSON
@@ -350,6 +350,46 @@ def _apply_saturday_backfill():
         except Exception: pass
 _apply_saturday_backfill()
 
+# --- New: force-fill first two Saturday games for target users if still blank ---
+def _force_first_two_targets():
+    """If any target user still has blank picks for games 0 or 1, attempt to pull from snapshot;
+    if snapshot also blank, leave untouched (avoids fabricating picks)."""
+    if not SATURDAY_FILE.exists():
+        return False
+    try:
+        with SATURDAY_FILE.open('r', encoding='utf-8') as f:
+            snapshot = json.load(f)
+    except Exception:
+        return False
+    if not isinstance(snapshot, dict):
+        return False
+    changed = False
+    for em in _SAT_BACKFILL_TARGETS:
+        cur = SATURDAY_PICKS.get(em)
+        snap = snapshot.get(em)
+        if not isinstance(cur, list):
+            cur = ['']*len(SATURDAY_LABELS)
+            SATURDAY_PICKS[em] = cur
+            changed = True
+        if snap and isinstance(snap, list):
+            # normalize snapshot length
+            snap_norm = snap[:len(SATURDAY_LABELS)] + ['']*max(0, len(SATURDAY_LABELS)-len(snap))
+            # For first two indices only
+            for i in (0,1):
+                if i < len(cur) and not cur[i] and snap_norm[i]:
+                    cur[i] = str(snap_norm[i]).strip().upper()
+                    changed = True
+        # Ensure list length integrity
+        if len(cur) < len(SATURDAY_LABELS):
+            cur.extend(['']*(len(SATURDAY_LABELS)-len(cur)))
+            changed = True
+    if changed:
+        _save_saturday(SATURDAY_PICKS)
+        _refresh_all_users()
+    return changed
+
+_force_first_two_targets()
+
 # --- CSV authoritative rebuild (new) ---
 # Saturday should now derive its live/authoritative state from the CSV log (latest row per email),
 # not from the JSON snapshot. We still keep the JSON snapshot for durability / restart speed, but
@@ -415,6 +455,9 @@ def _repair_saturday_from_file():
                 if val and not cur[i]:
                     cur[i] = val.strip().upper()
                     changed=True
+        # After generic repair, force-fill first two for targets (may already be handled above but ensure).
+        if _force_first_two_targets():
+            changed = True
         if changed:
             _save_saturday(SATURDAY_PICKS)
             _refresh_all_users()
@@ -1260,6 +1303,33 @@ def admin_saturday_score_debug():
         score = sum(1 for a,b in zip(norm, res_norm) if b and a==b)
         data.append({ 'email': email, 'raw': raw, 'norm': norm, 'score': score })
     return jsonify({ 'ok': True, 'count': len(data), 'resultsRaw': SATURDAY_RESULTS, 'resultsNorm': [_norm_team(r) for r in SATURDAY_RESULTS], 'entries': data })
+
+@app.route('/api/admin/saturday/force_refill', methods=['POST'])
+def admin_saturday_force_refill():
+    """Admin: Manually trigger repair + force-fill of first two Saturday games for target users.
+    Gated by ADMIN_TOKEN if set. Returns whether any changes were applied and a snapshot of
+    the first two picks for each target user after the operation.
+    """
+    token = request.args.get('token') or request.headers.get('X-Admin-Token')
+    admin_token = os.environ.get('ADMIN_TOKEN')
+    if admin_token and token != admin_token:
+        return jsonify({ 'ok': False, 'error': 'forbidden' }), 403
+    # Reload & attempt generic repair first, then explicit force for indices 0/1
+    _maybe_reload_saturday()
+    repaired = _repair_saturday_from_file()
+    forced = _force_first_two_targets()
+    targets_state = {}
+    for em in _SAT_BACKFILL_TARGETS:
+        picks = SATURDAY_PICKS.get(em, ['']*len(SATURDAY_LABELS))
+        targets_state[em] = picks[:2]
+    return jsonify({
+        'ok': True,
+        'version': VERSION,
+        'repairedChanged': repaired,
+        'forceFillChanged': forced,
+        'changedAny': bool(repaired or forced),
+        'targetsFirstTwo': targets_state
+    })
 
 # --- New Saturday per-game lock endpoints ---
 ADMIN_EMAIL = 'scire.ben@gmail.com'  # single admin (adjust if needed)
