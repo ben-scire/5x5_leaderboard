@@ -14,7 +14,10 @@ FRIDAY_RESULTS = ['USF', 'WASH']
 SATURDAY_RESULTS = [
     'OHIO STATE',   # Game 1 final (Ohio State covers -15.5)
     'MISSOURI',     # Game 2 final (Missouri covers +3.5 vs Alabama)
-    None, None, None, None
+    'INDIANA',      # Game 3 final (Indiana covers +7.5)
+    'TEXAS',        # Game 4 final (Texas covers -2.5)
+    'GEORGIA',      # Game 5 final (Georgia covers -4.5)
+    'BYU'           # Game 6 final (BYU covers -2.5)
 ]
 # Sunday results placeholder (8 games)
 SUNDAY_RESULTS = [None]*8
@@ -1271,6 +1274,34 @@ def admin_saturday_force_json():
         return jsonify({ 'ok': False, 'error': 'persist_failed' }), 500
     _refresh_all_users()
     return jsonify({ 'ok': True, 'count': len(SATURDAY_PICKS), 'forced': True, 'forceEnvActive': FORCE_SATURDAY_JSON })
+
+@app.route('/api/admin/saturday/diagnose')
+def admin_saturday_diagnose():
+    """Admin: Diagnose Saturday pick completeness.
+    Reports which users have blanks for finalized games, counts, and environment/source flags.
+    Optional ADMIN_TOKEN gate if configured.
+    """
+    token = request.args.get('token') or request.headers.get('X-Admin-Token')
+    admin_token = os.environ.get('ADMIN_TOKEN')
+    if admin_token and token != admin_token:
+        return jsonify({ 'ok': False, 'error': 'forbidden' }), 403
+    # Determine finalized indices
+    finalized = [i for i, r in enumerate(SATURDAY_RESULTS) if r]
+    blanks = []
+    for email, picks in SATURDAY_PICKS.items():
+        missing_idx = [i for i in finalized if (i >= len(picks) or not picks[i])]
+        if missing_idx:
+            blanks.append({ 'email': email, 'blankIndices': missing_idx })
+    source = 'json-forced' if FORCE_SATURDAY_JSON else ('csv-log' if SATURDAY_CSV_LOG.exists() else 'json-snapshot')
+    return jsonify({
+        'ok': True,
+        'forceSaturdayJson': FORCE_SATURDAY_JSON,
+        'source': source,
+        'finalizedIndices': finalized,
+        'usersWithBlanks': len(blanks),
+        'blankDetails': blanks,
+        'totalUsers': len(SATURDAY_PICKS)
+    })
 
 # --- New Saturday per-game lock endpoints ---
 ADMIN_EMAIL = 'scire.ben@gmail.com'  # single admin (adjust if needed)
