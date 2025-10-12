@@ -3,7 +3,7 @@
 from flask import Flask, jsonify, send_from_directory, request
 import time, os, json, pathlib
 
-VERSION = 'week-multi-6'  # bumped for cache bust after Saturday CSV removal & JSON-only mode
+VERSION = 'week-multi-7'  # disable Saturday game locks & cache bust
 # Always treat Saturday JSON snapshot as authoritative; ignore CSV log auto-rebuilds.
 FORCE_SATURDAY_JSON = True  # previously env-driven; now permanently enabled
 RUNTIME_FORCE_SATURDAY_JSON = True  # runtime flag also locked on so reload logic always prefers JSON
@@ -411,33 +411,12 @@ def _parse_iso_utc(ts: str):
 _SATURDAY_MANUAL_LOCKS = _load_saturday_game_locks()  # keys are str(indices) -> bool
 
 def _is_saturday_game_locked(index: int):
-    # Manual lock check
-    if str(index) in _SATURDAY_MANUAL_LOCKS and _SATURDAY_MANUAL_LOCKS[str(index)]:
-        return True
-    # Kickoff auto lock based on start time
-    if 0 <= index < len(SATURDAY_SCHEDULE):
-        start_iso = SATURDAY_SCHEDULE[index].get('start')
-        start_epoch = _parse_iso_utc(start_iso)
-        if start_epoch is not None and time.time() >= start_epoch:
-            return True
+    """Locking disabled: always returns False so users' picks always persist/update."""
     return False
 
 def _saturday_effective_locks():
-    out = []
-    now_epoch = time.time()
-    for i, g in enumerate(SATURDAY_SCHEDULE):
-        start_iso = g.get('start')
-        start_epoch = _parse_iso_utc(start_iso)
-        started = (start_epoch is not None and now_epoch >= start_epoch)
-        manual = bool(_SATURDAY_MANUAL_LOCKS.get(str(i)))
-        out.append({
-            'index': i,
-            'manualLocked': manual,
-            'started': started,
-            'effectiveLocked': manual or started,
-            'start': start_iso
-        })
-    return out
+    # All games unlocked; reflect that explicitly for clients.
+    return [{ 'index': i, 'manualLocked': False, 'started': False, 'effectiveLocked': False, 'start': g.get('start') } for i,g in enumerate(SATURDAY_SCHEDULE)]
 
 def _seed_friday_from_csv():
     """If Fri_Picks.csv exists, load it (email,pick1,pick2) into initial FRIDAY_PICKS before JSON overrides.
@@ -1090,19 +1069,13 @@ def saturday_submit():
     if not _check_pin(email, pin):
         return jsonify({ 'ok': False, 'error': 'invalid_pin' }), 403
     # Preserve existing picks for any game already locked; update only unlocked indices.
-    existing = SATURDAY_PICKS.get(email, [''] * len(SATURDAY_LABELS))
-    updated = []
-    for idx, val in enumerate(picks):
-        if _is_saturday_game_locked(idx):
-            # Keep prior value (cannot modify locked game)
-            updated.append(existing[idx] if idx < len(existing) else '')
-        else:
-            updated.append(str(val or '').strip().upper())
+    # With locking disabled, accept all submitted values (normalized) directly.
+    updated = [str(val or '').strip().upper() for val in picks]
     SATURDAY_PICKS[email] = updated
     if not _save_saturday(SATURDAY_PICKS):
         return jsonify({ 'ok': False, 'error': 'persist_failed' }), 500
     _append_saturday_csv(email, SATURDAY_PICKS[email])
-    return jsonify({ 'ok': True, 'saved': True, 'lockedGames': [i for i in range(len(SATURDAY_LABELS)) if _is_saturday_game_locked(i)] })
+    return jsonify({ 'ok': True, 'saved': True, 'lockedGames': [] })
 
 @app.route('/api/picks/saturday/status')
 def saturday_status():
