@@ -498,6 +498,28 @@ function normalizeOhioStatePicks(){
 }
 normalizeOhioStatePicks();
 
+// Extend normalization to ensure raw 'IND' is upgraded to 'INDIANA' so it always scores.
+function normalizeIndianaPicks(){
+  try {
+    if(!userPicks || !userPicks.Sat) return;
+    let changed=false;
+    Object.keys(userPicks.Sat).forEach(email=>{
+      const arr = userPicks.Sat[email];
+      if(Array.isArray(arr)){
+        for(let i=0;i<arr.length;i++){
+          if(arr[i]==='IND') { arr[i]='INDIANA'; changed=true; }
+        }
+      }
+    });
+    if(changed){
+      recalcPoints('Sat'); recalcTotal(); updateLeaderboard();
+      if(picksDay==='Sat' && typeof renderPicksTable==='function') renderPicksTable('Sat');
+      console.log('[Normalization] Upgraded IND -> INDIANA in user picks');
+    }
+  } catch(e){ /* silent */ }
+}
+normalizeIndianaPicks();
+
 // Robust post-load enforcement & blank pick repair for Saturday
 function enforceSaturdayFinals(){
   const finals = ['Ohio State','Missouri','Indiana','Texas','Georgia','BYU'];
