@@ -150,71 +150,31 @@ function _norm(raw){
   return s;
 }
 
-function picksMatch(pick, cover){
-  if(!pick || !cover) return false;
-  if(cover==='PUSH') return false;
-  const p = (pick||'').toString().trim().toUpperCase();
-  const c = (cover||'').toString().trim().toUpperCase();
-  if(c==='OVER' || c==='UNDER') return p===c; // case-insensitive exact for totals
-  return _norm(pick) === _norm(cover);
+function renderPicksTable(day=picksDay){
+  const tbl = document.getElementById('picksTable');
+  const userCount = users.length;
+  if(userCount===0){
+    tbl.innerHTML = '<tr><th class="th-small">Player</th><th class="th-small">Picks</th></tr>'+
+      '<tr><td colspan="2" style="text-align:center;padding:14px 10px;font-size:13px;color:#9fb2bf;">No '+day+' submissions yet.</td></tr>';
+    return;
+  }
+  const labels = picksLabels[day] || [];
+  let header = '<tr><th class="th-small">Player</th>';
+  labels.forEach((_,i)=>{ header += `<th class="th-small">${headerAbbr(day,i)}</th>`; });
+  header += '</tr>';
+  const rows = users.map(u=>{
+    const picks = (userPicks[day] && userPicks[day][u.username]) || [];
+    let cells='';
+    labels.forEach((_,i)=>{
+      const rawPick = picks[i]||'-';
+      const cov = (coveredPicks[day]||[])[i];
+      let cls=''; if(cov){ if(cov==='PUSH') cls='push'; else if(picksMatch(rawPick,cov)) cls='hit'; else if(rawPick && rawPick!=='-') cls='miss'; }
+      cells += `<td class="${cls}">${lookupAbbr(rawPick)}</td>`;
+    });
+    return `<tr><td>${abbrevUser(u)}</td>${cells}</tr>`;
+  }).join('');
+  tbl.innerHTML = header + rows;
 }
-
-// Ensure coveredPicks tokens align with at least one user pick representation.
-// If the stored cover has zero matching picks (after normalization), we attempt to
-// replace it with the most common user pick variant that normalizes equivalently.
-function alignCoveredPicks(){
-  const days = Object.keys(picksLabels);
-  days.forEach(day=>{
-    const labels = picksLabels[day]||[];
-    if(!labels.length) return;
-    const covers = coveredPicks[day];
-    if(!Array.isArray(covers)) return;
-    for(let i=0;i<labels.length;i++){
-      let cover = covers[i];
-      if(!cover || cover==='PUSH') continue; // skip empties & pushes
-      // Gather all user pick variants for this slot
-      const variantCounts = new Map();
-      users.forEach(u=>{
-        const picks = userPicks[day] && userPicks[day][u.username];
-        if(!picks) return;
-        const pk = picks[i];
-        if(!pk) return;
-        const normPk = _norm(pk);
-        variantCounts.set(pk, (variantCounts.get(pk)||0) + 1);
-        // Also track normalized key (for easier later matching frequency)
-        variantCounts.set(normPk, (variantCounts.get(normPk)||0) + 0); // placeholder ensure presence
-      });
-      const anyMatch = Array.from(variantCounts.keys()).some(k=> picksMatch(k, cover));
-      if(!anyMatch){
-        // Try to find a variant whose normalized form matches cover's normalized form (maybe case / punctuation diff)
-        const coverNorm = _norm(cover);
-        let replacement = null; let replacementFreq = -1;
-        variantCounts.forEach((cnt, variant)=>{
-          if(_norm(variant) === coverNorm && cnt > replacementFreq){ replacement = variant; replacementFreq = cnt; }
-        });
-        // If still nothing, choose the most common variant overall (ensuring we at least map to an existing token)
-        if(!replacement){
-          variantCounts.forEach((cnt, variant)=>{
-            // skip normalized-only placeholders (those that equal their own lower trimmed and were given zero weight)
-            if(cnt > replacementFreq && variant.length>1){ replacement = variant; replacementFreq = cnt; }
-          });
-        }
-        if(replacement){
-          console.warn('[Covered Alignment] Replacing unmatched cover', cover, 'with', replacement, 'for', day, 'index', i);
-          covers[i] = replacement;
-        } else {
-          console.error('[Covered Alignment] No valid variant found for cover', cover, 'day', day, 'index', i, '— scoring may yield zero hits.');
-        }
-      }
-    }
-  });
-}
-// Run alignment once at load (after initial coveredPicks defined) before any scoring functions.
-alignCoveredPicks();
-
-// --- Immediate static prop resolution (manual directive) ---
-// User request: The Thursday prop (index 2) has already been decided as YES and
-// should immediately award points. We set the covered value once (idempotent)
 // unless it was already populated (e.g., by live logic or a manual override).
 try {
   if (picksLabels && Array.isArray(picksLabels['Thu']) && /Anytime TD/i.test(picksLabels['Thu'][2]||'')) {
@@ -250,18 +210,13 @@ try {
 function recalcPoints(day){
   if(!picksLabels[day]) return;
   users.forEach(u=>{
-    const picks = userPicks[day] && userPicks[day][u.username];
-    let pts=0; if(picks){
-      (coveredPicks[day]||[]).forEach((cov,i)=>{
-        if(!cov) return;
-        // For Saturday partial reveal, only count points for indices < partialSatRevealCount until full reveal
-        if(day==='Sat' && typeof window.partialSatRevealCount==='number'){
-          if(window.partialSatRevealCount < (picksLabels['Sat']||[]).length){
-            if(i >= window.partialSatRevealCount) return; // unrevealed game: do not award yet
-          }
-        }
-        if(picksMatch(picks[i], cov)) pts++; }); }
-  if(day==='Thu') u.thurs = pts; else if(day==='Fri') u.fri = pts; else if(day==='Sat') u.sat = pts; else if(day==='Sun') u.sun = pts; else if(day==='Mon') u.mon = pts;
+    const picks = (userPicks[day] && userPicks[day][u.username]) || [];
+    let pts=0;
+    (coveredPicks[day]||[]).forEach((cov,i)=>{
+      if(!cov || cov==='PUSH') return;
+      if(picksMatch(picks[i], cov)) pts++;
+    });
+    if(day==='Thu') u.thurs = pts; else if(day==='Fri') u.fri = pts; else if(day==='Sat') u.sat = pts; else if(day==='Sun') u.sun = pts; else if(day==='Mon') u.mon = pts;
   });
 }
 function recalcTotal(){ users.forEach(u=>{ u.total = (u.thurs||0)+(u.fri||0)+(u.sat||0)+(u.sun||0)+(u.mon||0); }); }
@@ -444,67 +399,11 @@ function updateLeaderboard(){
   // Removed Live* legend chip logic.
 }
 
-// Admin helper: call window.revealSaturday() in console once it's time to show Saturday picks & scoring.
-window.revealSaturday = function(){
-  try {
-    users.forEach(u=>{ u.sat = (userPicks['Sat'] && userPicks['Sat'][u.username]) ? 0 : 0; });
-    // Recompute with real Saturday points now
-    users.forEach((u,i)=>{ u.sat = (function pointsForDay(day,user){
-      const picks = (userPicks[day] && userPicks[day][user.username]) || [];
-      const covers = coveredPicks[day] || [];
-      let pts=0; covers.forEach((c,i)=>{ if(!c || c==='PUSH') return; const pick=picks[i]; if(pick && picksMatch(pick,c)) pts++; });
-      return pts; })( 'Sat', u); });
-    users.forEach(u=>{ u.total = (u.thurs||0)+(u.fri||0)+(u.sat||0)+(u.sun||0)+(u.mon||0); });
-    // On full reveal set partial reveal count to full length so future scoring includes all games
-    if(Array.isArray(picksLabels['Sat'])) window.partialSatRevealCount = picksLabels['Sat'].length;
-    updateLeaderboard();
-    if(picksDay==='Sat') renderPicksTable('Sat');
-    console.log('[Reveal] Saturday picks and points revealed.');
-  } catch(e){ console.warn('Reveal Saturday failed', e); }
-};
-
-// ================= Partial Saturday Reveal Support =================
-// New requirement: first two Saturday games are now live (show picks + live scoring),
-// remaining games stay hidden until full reveal. We introduce a global counter
-// partialSatRevealCount controlling how many leading Saturday pick indices are public.
-// Default to 2 (first two games live) for this week.
-// All Saturday games final: force full reveal immediately.
-window.partialSatRevealCount = (picksLabels['Sat']||[]).length;
-
-// Inject known Saturday finals (first two games) so hits/misses color immediately.
+// Saturday: inject finals once (always final now) & recalc immediately
 try {
   if(Array.isArray(coveredPicks['Sat'])){
-    // Inject all six finals now that games are complete.
-  const finals = ['Ohio State','Missouri','Oregon','Texas','Georgia','BYU'];
-    for(let i=0;i<finals.length;i++){
-      if(coveredPicks['Sat'][i] == null || coveredPicks['Sat'][i]==='') coveredPicks['Sat'][i] = finals[i];
-    }
-    // Ensure full reveal when all finals known.
-    if(Array.isArray(picksLabels['Sat'])) window.partialSatRevealCount = picksLabels['Sat'].length;
-  // Recalculate points for full slate now that all finals known
-  window.partialSatRevealCount = (picksLabels['Sat']||[]).length;
-  recalcPoints('Sat');
-    recalcTotal();
-    updateLeaderboard();
-    if(picksDay==='Sat') renderPicksTable('Sat');
-  }
-} catch(_e){}
-
-// Admin helper to adjust on the fly if needed.
-window.setPartialSaturdayReveal = function(count){
-  count = Math.max(0, Math.min(count, (picksLabels['Sat']||[]).length));
-  window.partialSatRevealCount = count;
-  // Recalculate Saturday points respecting new reveal window
-  recalcPoints('Sat');
-  recalcTotal();
-  updateLeaderboard();
-  if(picksDay==='Sat') renderPicksTable('Sat');
-  console.log('[PartialReveal] Saturday reveal count set to', count);
-};
-
-// Initial recalculation in case page loaded after partial reveal directive applied
-try {
-  if(window.partialSatRevealCount>0 && userPicks && userPicks['Sat']){
+    const finals = ['Ohio State','Missouri','Oregon','Texas','Georgia','BYU'];
+    finals.forEach((f,i)=>{ if(!coveredPicks['Sat'][i]) coveredPicks['Sat'][i] = f; });
     recalcPoints('Sat');
     recalcTotal();
     updateLeaderboard();
