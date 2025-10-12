@@ -57,6 +57,44 @@ const finalResults = {
   } catch(e){ /* silent */ }
 })();
 
+// Early Saturday hydration: ensure all users with Saturday submissions appear immediately
+// and at least the first two game columns render on initial load.
+(async function hydrateSaturdayPicksEarly(){
+  try {
+    const r = await fetch('/api/picks/public?day=Sat',{cache:'no-store'});
+    if(!r.ok) return; const j = await r.json(); const entries=(j&&j.entries)||{};
+    const firstTwoCount = 2; // explicitly show first two games
+    Object.keys(entries).forEach(email=>{
+      const arr = entries[email].picks || [];
+      // Truncate/pad to at least firstTwoCount so table shows two columns even before labels fully hydrate
+      let needed = (picksLabels && picksLabels.Sat && picksLabels.Sat.length) ? picksLabels.Sat.length : Math.max(firstTwoCount, arr.length);
+      if(needed < firstTwoCount) needed = firstTwoCount;
+      let adj = arr.slice(0, needed);
+      while(adj.length < needed) adj.push('');
+      if(!userPicks.Sat[email]){
+        userPicks.Sat[email] = adj;
+        if(!users.find(u=>u.username===email)){
+          users.push({ username:email, thurs:0,fri:0,sat:0,sun:0,mon:0,total:0 });
+        }
+      } else {
+        if(userPicks.Sat[email].length < needed){
+          while(userPicks.Sat[email].length < needed) userPicks.Sat[email].push('');
+        }
+      }
+    });
+    // Ensure all known users (from existing users array) have at least placeholder Saturday picks for first two games
+    users.forEach(u=>{
+      if(!userPicks.Sat[u.username]){
+        userPicks.Sat[u.username] = Array(firstTwoCount).fill('');
+      } else if(userPicks.Sat[u.username].length < firstTwoCount){
+        while(userPicks.Sat[u.username].length < firstTwoCount) userPicks.Sat[u.username].push('');
+      }
+    });
+    if(typeof renderPicksTable==='function') renderPicksTable('Sat');
+    if(typeof updateLeaderboard==='function') updateLeaderboard();
+  } catch(e){ /* silent */ }
+})();
+
 function abbrevUser(u){ return nicknameMap[u.username] || u.username.split('@')[0]; }
 // Determine which side is covering given a home-based spread (negative => home favored, positive => away favored)
 // Robust spread resolver (home-based line):
