@@ -140,6 +140,11 @@ function _norm(raw){
   s = s.replace(/mizzou|\bmiz\b/g,'missouri');
   s = s.replace(/nd$/,'notre dame');
   s = s.replace(/ala\b/g,'alabama');
+  // Added explicit short CFB abbreviations used in raw picks before teamAbbrMap is populated.
+  // This fixes highlight mismatches where TEX / UGA / IND looked like losses vs full finals.
+  s = s.replace(/^tex$/,'texas');
+  s = s.replace(/^uga$/,'georgia');
+  s = s.replace(/^ind$/,'indiana');
   s = s.replace(/sc ?ar|s ?car|south car\b/g,'south carolina');
   s = s.replace(/miami(?![a-z])/,'miami');
   // New broader Saturday specific mappings
@@ -247,27 +252,7 @@ window.setCovered = function(day, results){
 /* ============= Leaderboard (Chart.js) ============= */
 let chart, chartInitialized=false;
 let satPatternCache = null; // cache for Saturday stripe pattern
-// Manual Saturday score overrides (authoritative) to bypass client-side mis-scaling issue.
-// Values intentionally in 2..5 range per requirement (floor raised where raw calc was 1).
-const manualSatScores = {
-  'jlindsey3428@gmail.com': 2,
-  'kylejkz11@gmail.com': 3,
-  'timjbohlman@gmail.com': 3,
-  'amacdonald171@gmail.com': 3,
-  'samuel.lehman3337@gmail.com': 3,
-  'williamjabbott22@gmail.com': 3,
-  'goodnoughdylan@gmail.com': 5,
-  'scire.ben@gmail.com': 4,
-  'jaked9577@yahoo.com': 2,
-  'sam.scire@hotmail.com': 4,
-  'shawnscottcarl@gmail.com': 3,
-  'max1solov@gmail.com': 3,
-  'wyaggy3@gmail.com': 2,
-  'finsmaniac1551@gmail.com': 3,
-  'soligonaustin@outlook.com': 2,
-  'jakelehman100@gmail.com': 2,
-  'hankrudden@yahoo.com': 2
-};
+// Manual Saturday score overrides removed (all games final). Raw scoring now authoritative.
 // High-contrast colors for clearer separation between day segments
 // Previous palette used three similar blue shades; replaced with blue / green / orange.
 const DAY_COLORS = {
@@ -351,10 +336,8 @@ function updateLeaderboard(){
   users.forEach((u,i)=>{
     u.thurs = thursActual[i];
     u.fri   = friActual[i];
-    const rawSat = satActual[i];
-    // Apply manual override if present; clamp to 0..6 safeguard.
-    const overrideSat = manualSatScores[u.username] != null ? manualSatScores[u.username] : rawSat;
-    u.sat   = Math.min(6, Math.max(0, overrideSat));
+  const rawSat = satActual[i];
+  u.sat   = Math.min(6, Math.max(0, rawSat));
     u.sun   = sunActual[i];
     u.mon   = monActual[i];
     u.total = u.thurs + u.fri + u.sat + u.sun + u.mon;
