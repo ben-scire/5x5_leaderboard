@@ -4,8 +4,9 @@ from flask import Flask, jsonify, send_from_directory, request
 import time, os, json, pathlib
 
 VERSION = 'week-multi-4'  # bumped to force client cache bust (query params) after adding debug + cache headers
-FORCE_SATURDAY_JSON = os.environ.get('FORCE_SATURDAY_JSON', '0') in ('1','true','TRUE','yes','YES')
-RUNTIME_FORCE_SATURDAY_JSON = False  # runtime switch without redeploy
+# Always treat Saturday JSON snapshot as authoritative; ignore CSV log auto-rebuilds.
+FORCE_SATURDAY_JSON = True  # previously env-driven; now permanently enabled
+RUNTIME_FORCE_SATURDAY_JSON = True  # runtime flag also locked on so reload logic always prefers JSON
 
 # Final outcomes for the single Thursday game
 RESULTS = ['NYG', 'OVER', 'YES']  # Thursday: spread winner, total, prop
@@ -355,10 +356,16 @@ _SATURDAY_FILE_MTIME = SATURDAY_FILE.stat().st_mtime if SATURDAY_FILE.exists() e
 
 # Post-definition startup sync: if CSV present, rebuild picks immediately.
 try:
-    if not FORCE_SATURDAY_JSON and SATURDAY_CSV_LOG.exists():
-        _tmp_latest = _snapshot_latest_saturday_from_log()
-        if isinstance(_tmp_latest, dict) and _tmp_latest:
-            SATURDAY_PICKS = _tmp_latest
+    # With JSON authoritative, just ensure snapshot exists; if missing but CSV exists, do a one-time bootstrap.
+    if not SATURDAY_PICKS and SATURDAY_FILE.exists():
+        data = _load_saturday()
+        if isinstance(data, dict) and data:
+            SATURDAY_PICKS = data
+    elif not SATURDAY_PICKS and SATURDAY_CSV_LOG.exists():
+        # fallback bootstrap from CSV once, then persist to JSON
+        latest = _snapshot_latest_saturday_from_log()
+        if isinstance(latest, dict) and latest:
+            SATURDAY_PICKS = latest
             _save_saturday(SATURDAY_PICKS)
 except Exception:
     pass
@@ -373,35 +380,12 @@ def _maybe_reload_saturday():
     global SATURDAY_PICKS, _SATURDAY_FILE_MTIME, _SATURDAY_CSV_MTIME
     reloaded = False
     try:
-        if FORCE_SATURDAY_JSON or RUNTIME_FORCE_SATURDAY_JSON:
-            # Ignore CSV; always reload from JSON snapshot if it changed.
-            if SATURDAY_FILE.exists():
-                json_mtime = SATURDAY_FILE.stat().st_mtime
-                if _SATURDAY_FILE_MTIME is None or json_mtime > _SATURDAY_FILE_MTIME:
-                    data = _load_saturday()
-                    if isinstance(data, dict):
-                        SATURDAY_PICKS = data
-                        _SATURDAY_FILE_MTIME = json_mtime
-                        reloaded = True
-                        _refresh_all_users()
-            return reloaded
-        # CSV first
-        if SATURDAY_CSV_LOG.exists():
-            csv_mtime = SATURDAY_CSV_LOG.stat().st_mtime
-            if _SATURDAY_CSV_MTIME is None or csv_mtime > _SATURDAY_CSV_MTIME:
-                latest = _snapshot_latest_saturday_from_log()
-                if isinstance(latest, dict):
-                    SATURDAY_PICKS = latest
-                    # Keep JSON snapshot in sync (best-effort, ignore failure)
-                    _save_saturday(SATURDAY_PICKS)
-                    _SATURDAY_CSV_MTIME = csv_mtime
-                    reloaded = True
-        # JSON fallback (only if we did not just rebuild from CSV)
-        if not reloaded and SATURDAY_FILE.exists():
+        # Only monitor JSON snapshot changes.
+        if SATURDAY_FILE.exists():
             json_mtime = SATURDAY_FILE.stat().st_mtime
             if _SATURDAY_FILE_MTIME is None or json_mtime > _SATURDAY_FILE_MTIME:
                 data = _load_saturday()
-                if isinstance(data, dict):
+                if isinstance(data, dict) and data:
                     SATURDAY_PICKS = data
                 _SATURDAY_FILE_MTIME = json_mtime
                 reloaded = True
@@ -1220,93 +1204,7 @@ def saturday_all():
         'gameLocks': _saturday_effective_locks()
     })
 
-@app.route('/api/admin/saturday/rebuild', methods=['POST'])
-def admin_saturday_rebuild():
-    """Admin: Rebuild in-memory + JSON snapshot of Saturday picks from CSV log.
-    Optional ADMIN_TOKEN gate: if env ADMIN_TOKEN set, require ?token= or header X-Admin-Token.
-    Returns before/after counts and which emails were added/updated.
-    """
-    token = request.args.get('token') or request.headers.get('X-Admin-Token')
-    admin_token = os.environ.get('ADMIN_TOKEN')
-    if admin_token and token != admin_token:
-        return jsonify({ 'ok': False, 'error': 'forbidden' }), 403
-    before_keys = set(SATURDAY_PICKS.keys())
-    latest = _snapshot_latest_saturday_from_log()
-    if not isinstance(latest, dict):
-        return jsonify({ 'ok': False, 'error': 'rebuild_failed' }), 500
-    added = [e for e in latest.keys() if e not in before_keys]
-    changed = []
-    for e in latest:
-        if e in SATURDAY_PICKS and SATURDAY_PICKS[e] != latest[e]:
-            changed.append(e)
-    # Replace and persist
-    globals()['SATURDAY_PICKS'] = latest
-    _save_saturday(SATURDAY_PICKS)
-    _refresh_all_users()
-    return jsonify({
-        'ok': True,
-        'countBefore': len(before_keys),
-        'countAfter': len(SATURDAY_PICKS),
-        'added': sorted(added),
-        'changed': sorted(changed),
-        'snapshotSaved': True
-    })
-
-@app.route('/api/admin/saturday/force_json', methods=['POST'])
-def admin_saturday_force_json():
-    """Admin: Forcefully overwrite Saturday picks from supplied JSON body { picks: { email: [..6..] } }.
-    Respects ADMIN_TOKEN if set. Writes saturday_picks.json and reloads in-memory without touching CSV log.
-    Intended for emergency recovery when CSV ingestion is broken on Render.
-    """
-    token = request.args.get('token') or request.headers.get('X-Admin-Token')
-    admin_token = os.environ.get('ADMIN_TOKEN')
-    if admin_token and token != admin_token:
-        return jsonify({ 'ok': False, 'error': 'forbidden' }), 403
-    payload = request.get_json(force=True, silent=True) or {}
-    raw = payload.get('picks') or {}
-    if not isinstance(raw, dict):
-        return jsonify({ 'ok': False, 'error': 'invalid_payload' }), 400
-    cleaned = {}
-    for email, picks in raw.items():
-        if not isinstance(email, str) or '@' not in email:
-            continue
-        if not isinstance(picks, list):
-            continue
-        adj = picks[:len(SATURDAY_LABELS)]
-        while len(adj) < len(SATURDAY_LABELS):
-            adj.append('')
-        cleaned[email.lower()] = [ (p or '').strip().upper() for p in adj ]
-    if not cleaned:
-        return jsonify({ 'ok': False, 'error': 'empty_after_clean' }), 400
-    # Overwrite in-memory + snapshot
-    globals()['SATURDAY_PICKS'] = cleaned
-    if not _save_saturday(SATURDAY_PICKS):
-        return jsonify({ 'ok': False, 'error': 'persist_failed' }), 500
-    _refresh_all_users()
-    return jsonify({ 'ok': True, 'count': len(SATURDAY_PICKS), 'forced': True, 'forceEnvActive': FORCE_SATURDAY_JSON })
-
-@app.route('/api/admin/saturday/use_snapshot', methods=['POST'])
-def admin_saturday_use_snapshot():
-    """Admin: Switch to existing saturday_picks.json as authoritative at runtime.
-    Sets RUNTIME_FORCE_SATURDAY_JSON flag and loads snapshot immediately.
-    """
-    token = request.args.get('token') or request.headers.get('X-Admin-Token')
-    admin_token = os.environ.get('ADMIN_TOKEN')
-    if admin_token and token != admin_token:
-        return jsonify({ 'ok': False, 'error': 'forbidden' }), 403
-    global RUNTIME_FORCE_SATURDAY_JSON, SATURDAY_PICKS, _SATURDAY_FILE_MTIME
-    RUNTIME_FORCE_SATURDAY_JSON = True
-    data = _load_saturday()
-    if not isinstance(data, dict) or not data:
-        return jsonify({ 'ok': False, 'error': 'snapshot_empty_or_invalid' }), 500
-    SATURDAY_PICKS = data
-    try:
-        if SATURDAY_FILE.exists():
-            _SATURDAY_FILE_MTIME = SATURDAY_FILE.stat().st_mtime
-    except Exception:
-        pass
-    _refresh_all_users()
-    return jsonify({ 'ok': True, 'runtimeForce': True, 'count': len(SATURDAY_PICKS) })
+## Removed rebuild/force_json/use_snapshot endpoints: JSON snapshot is always authoritative now.
 
 @app.route('/api/admin/saturday/diagnose')
 def admin_saturday_diagnose():
