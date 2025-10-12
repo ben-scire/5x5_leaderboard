@@ -3,7 +3,7 @@
 from flask import Flask, jsonify, send_from_directory, request
 import time, os, json, pathlib
 
-VERSION = 'week-multi-5'  # bump to trigger redeploy & cache bust after Saturday scoring fixes
+VERSION = 'week-multi-6'  # bumped for cache bust after Saturday CSV removal & JSON-only mode
 # Always treat Saturday JSON snapshot as authoritative; ignore CSV log auto-rebuilds.
 FORCE_SATURDAY_JSON = True  # previously env-driven; now permanently enabled
 RUNTIME_FORCE_SATURDAY_JSON = True  # runtime flag also locked on so reload logic always prefers JSON
@@ -235,8 +235,7 @@ SATURDAY_SCHEDULE = [
 ]
 
 # Saturday storage paths
-SATURDAY_FILE = pathlib.Path('data/picks/saturday_picks.json')
-SATURDAY_CSV_LOG = pathlib.Path('data/picks/saturday_picks_log.csv')
+SATURDAY_FILE = pathlib.Path('data/picks/saturday_picks.json')  # Saturday storage paths (JSON snapshot is the ONLY authoritative source now)
 SATURDAY_LOCK_FILE = pathlib.Path('data/picks/saturday_locked.json')
 SATURDAY_LOCK_STATUS = pathlib.Path('data/picks/saturday_lock_status.json')
 
@@ -268,18 +267,8 @@ def _save_saturday(data: dict):
         return False
 
 def _append_saturday_csv(email: str, picks: list):
-    try:
-        SATURDAY_CSV_LOG.parent.mkdir(parents=True, exist_ok=True)
-        is_new = not SATURDAY_CSV_LOG.exists()
-        with SATURDAY_CSV_LOG.open('a', encoding='utf-8') as f:
-            if is_new:
-                f.write('ts_iso,email,' + ','.join([f'pick{i+1}' for i in range(len(SATURDAY_LABELS))]) + '\n')
-            ts = time.strftime('%Y-%m-%dT%H:%M:%S', time.gmtime())
-            row = [ts, email] + picks
-            safe = [c.replace('\n',' ').replace('\r',' ').replace(',', ' ') for c in row]
-            f.write(','.join(safe) + '\n')
-    except Exception:
-        pass
+    # Deprecated: CSV logging disabled (JSON only). Kept as no-op for backward compatibility.
+    return
 
 def _is_saturday_locked():
     return SATURDAY_LOCK_FILE.exists()
@@ -315,85 +304,65 @@ def _load_saturday_lock_status():
 
 SATURDAY_PICKS = _load_saturday()
 
+def _enforce_full_saturday():
+    """Ensure every Saturday picks list is exactly len(SATURDAY_LABELS)."""
+    global SATURDAY_PICKS
+    changed = False
+    norm = {}
+    for email, picks in SATURDAY_PICKS.items():
+        if not isinstance(picks, list):
+            picks = []
+        if len(picks) < len(SATURDAY_LABELS):
+            picks = picks + [''] * (len(SATURDAY_LABELS)-len(picks))
+            changed = True
+        elif len(picks) > len(SATURDAY_LABELS):
+            picks = picks[:len(SATURDAY_LABELS)]
+            changed = True
+        norm[email] = picks
+    SATURDAY_PICKS = norm
+    if changed:
+        try: _save_saturday(SATURDAY_PICKS)
+        except Exception: pass
+
+_enforce_full_saturday()
+
 # --- CSV authoritative rebuild (new) ---
 # Saturday should now derive its live/authoritative state from the CSV log (latest row per email),
 # not from the JSON snapshot. We still keep the JSON snapshot for durability / restart speed, but
 # whenever the CSV log changes we rebuild SATURDAY_PICKS in-memory from it.
-_SATURDAY_CSV_MTIME = SATURDAY_CSV_LOG.stat().st_mtime if SATURDAY_CSV_LOG.exists() else None
-
-def _snapshot_latest_saturday_from_log():
-    if not SATURDAY_CSV_LOG.exists():
-        return SATURDAY_PICKS.copy()
-    latest = {}
-    try:
-        with SATURDAY_CSV_LOG.open('r', encoding='utf-8') as f:
-            lines = f.read().strip().splitlines()
-        if not lines:
-            return SATURDAY_PICKS.copy()
-        for line in lines[1:]:  # skip header
-            if not line.strip():
-                continue
-            parts = line.split(',')
-            # ts_iso,email,pick1..pick6
-            if len(parts) < 2 + len(SATURDAY_LABELS):
-                # tolerate short lines (pad later)
-                pass
-            email = parts[1].strip().lower()
-            picks_part = parts[2:2+len(SATURDAY_LABELS)]
-            picks = [p.strip().upper() for p in picks_part]
-            # Pad/truncate
-            if len(picks) < len(SATURDAY_LABELS):
-                picks += [''] * (len(SATURDAY_LABELS)-len(picks))
-            if len(picks) > len(SATURDAY_LABELS):
-                picks = picks[:len(SATURDAY_LABELS)]
-            latest[email] = picks
-        return latest
-    except Exception:
-        return SATURDAY_PICKS.copy()
+## Removed legacy Saturday CSV rebuild logic (JSON-only authoritative mode).
 
 # --- Hot reload support (mtime-based) for Saturday picks ---
 _SATURDAY_FILE_MTIME = SATURDAY_FILE.stat().st_mtime if SATURDAY_FILE.exists() else None
 
 # Post-definition startup sync: if CSV present, rebuild picks immediately.
 try:
-    # With JSON authoritative, just ensure snapshot exists; if missing but CSV exists, do a one-time bootstrap.
+    # JSON authoritative bootstrap
     if not SATURDAY_PICKS and SATURDAY_FILE.exists():
         data = _load_saturday()
         if isinstance(data, dict) and data:
             SATURDAY_PICKS = data
-    elif not SATURDAY_PICKS and SATURDAY_CSV_LOG.exists():
-        # fallback bootstrap from CSV once, then persist to JSON
-        latest = _snapshot_latest_saturday_from_log()
-        if isinstance(latest, dict) and latest:
-            SATURDAY_PICKS = latest
-            _save_saturday(SATURDAY_PICKS)
+            _enforce_full_saturday()
 except Exception:
     pass
 
 def _maybe_reload_saturday():
-    """Reload Saturday picks if either the JSON snapshot OR the CSV log changed.
-
-    Priority order:
-      1. If CSV log mtime changed -> rebuild from CSV (authoritative)
-      2. Else if JSON snapshot changed -> load JSON (fallback / durability)
-    """
-    global SATURDAY_PICKS, _SATURDAY_FILE_MTIME, _SATURDAY_CSV_MTIME
-    reloaded = False
+    """Reload Saturday picks if JSON snapshot changed (JSON-only mode)."""
+    global SATURDAY_PICKS, _SATURDAY_FILE_MTIME
     try:
-        # Only monitor JSON snapshot changes.
         if SATURDAY_FILE.exists():
             json_mtime = SATURDAY_FILE.stat().st_mtime
             if _SATURDAY_FILE_MTIME is None or json_mtime > _SATURDAY_FILE_MTIME:
                 data = _load_saturday()
                 if isinstance(data, dict) and data:
                     SATURDAY_PICKS = data
+                    _enforce_full_saturday()
                 _SATURDAY_FILE_MTIME = json_mtime
-                reloaded = True
+                _refresh_all_users()
+                return True
     except Exception:
         pass
-    if reloaded:
-        _refresh_all_users()
-    return reloaded
+    return False
 
 # ---- Per-game locking (Saturday) ----
 # New granular locking replaces the prior whole-day locking workflow for Saturday.
@@ -862,7 +831,7 @@ except Exception as _e:
 
 def compute_scores():
     """Return sorted list of scoreboard entries for all users (Thu + Fri + Sat + Sun) with normalization."""
-    _maybe_reload_saturday()  # refresh Saturday picks if CSV changed
+    _maybe_reload_saturday()  # refresh Saturday picks if JSON snapshot changed
     entries = []
     for email in ALL_USERS:
         thu_picks = HARD_PICKS[email]
@@ -1029,23 +998,11 @@ def healthz():
 
 # -------- Saturday debug / introspection (to diagnose missing games or picks on production) --------
 def _saturday_log_info():
-    info = { 'exists': SATURDAY_CSV_LOG.exists() }
-    if not SATURDAY_CSV_LOG.exists():
-        return info
-    try:
-        stat = SATURDAY_CSV_LOG.stat()
-        info['sizeBytes'] = stat.st_size
-        info['modified'] = time.strftime('%Y-%m-%dT%H:%M:%S', time.gmtime(stat.st_mtime))
-        with SATURDAY_CSV_LOG.open('r', encoding='utf-8') as f:
-            lines = f.read().strip().splitlines()
-        info['rowCount'] = max(0, len(lines)-1) if lines else 0
-    except Exception as e:
-        info['error'] = str(e)
-    return info
+    return { 'csvRemoved': True }
 
 @app.route('/api/debug/sat_state')
 def debug_sat_state():
-    # Force reload from CSV if changed
+    # Reload Saturday JSON if changed
     reloaded = _maybe_reload_saturday()
     # Basic stats
     schedule = [ { 'i': i, 'away': g.get('awayAbbr') or g.get('away'), 'home': g.get('homeAbbr') or g.get('home'), 'eventId': g.get('eventId'), 'start': g.get('start') } for i,g in enumerate(SATURDAY_SCHEDULE) ]
@@ -1053,7 +1010,7 @@ def debug_sat_state():
     sample = sorted(list(SATURDAY_PICKS.keys()))[:5]
     missing = [u for u in ALL_USERS if u not in SATURDAY_PICKS][:10]
     # Determine current authoritative source
-    source = 'json-forced' if FORCE_SATURDAY_JSON else ('csv-log' if SATURDAY_CSV_LOG.exists() else 'json-snapshot')
+    source = 'json-forced'
     def _fmt_mtime(path):
         try:
             if path.exists():
@@ -1067,8 +1024,8 @@ def debug_sat_state():
         'reloaded': reloaded,
         'forceSaturdayJson': FORCE_SATURDAY_JSON,
         'source': source,
-        'csvLogExists': SATURDAY_CSV_LOG.exists(),
-        'csvLogMtime': _fmt_mtime(SATURDAY_CSV_LOG),
+    'csvLogExists': False,
+    'csvLogMtime': None,
         'jsonSnapshotMtime': _fmt_mtime(SATURDAY_FILE),
         'scheduleCount': len(SATURDAY_SCHEDULE),
         'schedule': schedule,
@@ -1241,7 +1198,7 @@ def admin_saturday_diagnose():
         missing_idx = [i for i in finalized if (i >= len(picks) or not picks[i])]
         if missing_idx:
             blanks.append({ 'email': email, 'blankIndices': missing_idx })
-    source = 'json-forced' if FORCE_SATURDAY_JSON else ('csv-log' if SATURDAY_CSV_LOG.exists() else 'json-snapshot')
+    source = 'json-forced'
     return jsonify({
         'ok': True,
         'forceSaturdayJson': FORCE_SATURDAY_JSON,
