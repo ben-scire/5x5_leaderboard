@@ -476,6 +476,47 @@ try {
   }
 } catch(_e){ console.warn('[Sat Finals] apply failed', _e); }
 
+// Robust post-load enforcement & blank pick repair for Saturday
+function enforceSaturdayFinals(){
+  const finals = ['Ohio State','Missouri','Indiana','Texas','Georgia','BYU'];
+  if(!Array.isArray(coveredPicks['Sat'])) coveredPicks['Sat'] = [];
+  for(let i=0;i<finals.length;i++) coveredPicks['Sat'][i] = finals[i];
+  recalcPoints('Sat'); recalcTotal(); updateLeaderboard();
+}
+
+async function fixSaturdayBlanks(){
+  try {
+    const r = await fetch('/api/picks/public?day=Sat',{cache:'no-store'});
+    if(!r.ok) return; const j = await r.json(); const entries=(j&&j.entries)||{};
+    Object.keys(entries).forEach(email=>{
+      const arr = entries[email].picks || [];
+      if(!Array.isArray(userPicks.Sat[email])) userPicks.Sat[email] = Array(arr.length||6).fill('');
+      for(let i=0;i<Math.min(arr.length,2);i++){
+        // Only backfill if currently blank or '-'
+        if(!userPicks.Sat[email][i]) userPicks.Sat[email][i] = arr[i];
+      }
+    });
+    // If any user still missing first two picks but made later picks (shifted display), attempt shift fix
+    Object.keys(userPicks.Sat).forEach(email=>{
+      const picks = userPicks.Sat[email];
+      // Heuristic: if first two are blank and later slots contain teams, fetch fresh and copy first two from server if present
+      if(picks && picks.length>=4 && (!picks[0] && !picks[1]) && (picks[2]||picks[3])){
+        const server = (entries[email] && entries[email].picks) || [];
+        if(server[0]) picks[0] = server[0];
+        if(server[1]) picks[1] = server[1];
+      }
+    });
+    recalcPoints('Sat'); recalcTotal(); updateLeaderboard(); if(picksDay==='Sat') renderPicksTable('Sat');
+    console.log('[Sat Fix] Blank first-two picks backfilled where possible');
+  } catch(e){ console.warn('[Sat Fix] failed', e); }
+}
+
+// Schedule enforcement after load & after potential late hydration
+setTimeout(enforceSaturdayFinals, 200);
+setTimeout(fixSaturdayBlanks, 300);
+// Re-run again a bit later in case of slow network
+setTimeout(fixSaturdayBlanks, 1500);
+
 // Admin helper: reveal Sunday picks & scoring
 window.revealSunday = function(){
   try {
