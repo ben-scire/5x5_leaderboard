@@ -520,6 +520,44 @@ function normalizeIndianaPicks(){
 }
 normalizeIndianaPicks();
 
+// Unified Saturday normalization for all common abbreviations -> canonical full names.
+// This runs after hydration and prior to scoring recalcs to guarantee hit logic works.
+const _SAT_NORM_MAP = {
+  'OHIO ST':'OHIO STATE', 'OHST':'OHIO STATE',
+  'MIZ':'MISSOURI', 'MIZZOU':'MISSOURI',
+  'ILL':'ILLINOIS',
+  'ALA':'ALABAMA',
+  'IND':'INDIANA',
+  'ORE':'OREGON',
+  'OKLA':'OKLAHOMA',
+  'TEX':'TEXAS',
+  'UGA':'GEORGIA',
+  'AUB':'AUBURN',
+  'ARIZ':'ARIZONA'
+};
+function normalizeSaturdayUserPicks(){
+  try {
+    if(!userPicks || !userPicks.Sat) return false;
+    let changed=false;
+    Object.keys(userPicks.Sat).forEach(email=>{
+      const arr = userPicks.Sat[email];
+      if(!Array.isArray(arr)) return;
+      for(let i=0;i<arr.length;i++){
+        const v = arr[i];
+        if(v && _SAT_NORM_MAP[v]){ arr[i] = _SAT_NORM_MAP[v]; changed=true; }
+      }
+    });
+    if(changed){
+      recalcPoints('Sat'); recalcTotal(); updateLeaderboard();
+      if(picksDay==='Sat' && typeof renderPicksTable==='function') renderPicksTable('Sat');
+      console.log('[Normalization] Applied unified Saturday pick normalization');
+    }
+    return changed;
+  } catch(e){ return false; }
+}
+// Initial pass in case hydration already filled.
+normalizeSaturdayUserPicks();
+
 // Robust post-load enforcement & blank pick repair for Saturday
 function enforceSaturdayFinals(){
   const finals = ['Ohio State','Missouri','Indiana','Texas','Georgia','BYU'];
@@ -552,6 +590,8 @@ async function fixSaturdayBlanks(){
     });
     // Apply normalization after any backfill/shift operations
     normalizeOhioStatePicks();
+    normalizeIndianaPicks();
+    normalizeSaturdayUserPicks();
     recalcPoints('Sat'); recalcTotal(); updateLeaderboard(); if(picksDay==='Sat') renderPicksTable('Sat');
     console.log('[Sat Fix] Blank first-two picks backfilled where possible');
   } catch(e){ console.warn('[Sat Fix] failed', e); }
