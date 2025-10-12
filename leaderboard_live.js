@@ -141,6 +141,26 @@
       });
       try { if(typeof window.updateLeaderboard==='function') window.updateLeaderboard(); } catch(_){}
     }
+
+    // --- Always sync per-day scores (including Saturday) into legacy users array so bar chart stays current ---
+    try {
+      if(Array.isArray(window.users) && window.users.length){
+        const map = new Map(window.users.map(u=>[u.username,u]));
+        entries.forEach(e=>{
+          const u = map.get(e.email);
+          if(!u) return;
+          const pd = e.perDay || {};
+          u.thurs = pd.Thu ? (pd.Thu.score||0) : 0;
+          u.fri   = pd.Fri ? (pd.Fri.score||0) : 0;
+          u.sat   = pd.Sat ? (pd.Sat.score||0) : 0;
+            // ensure Saturday bar shows when points updated
+          u.sun   = pd.Sun ? (pd.Sun.score||0) : 0;
+          u.mon   = pd.Mon ? (pd.Mon.score||0) : 0;
+          u.total = u.thurs + u.fri + u.sat + u.sun + u.mon;
+        });
+        if(typeof window.updateLeaderboard==='function') window.updateLeaderboard();
+      }
+    } catch(syncErr){ console.warn('[live] users sync (scores) failed', syncErr); }
   }
 
   async function refresh(){
