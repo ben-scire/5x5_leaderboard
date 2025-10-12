@@ -316,11 +316,10 @@ function updateLeaderboard(){
   users.forEach((u,i)=>{
     u.thurs = thursActual[i];
     u.fri   = friActual[i];
-    // Hide Saturday contribution for now so leaderboard doesn't leak count of correct picks yet.
-  u.sat   = 0; // hidden until revealSaturday()
-  u.sun   = 0; // hide Sunday points until revealSunday()
+    u.sat   = satActual[i]; // show Saturday points immediately
+    u.sun   = sunActual[i]; // show Sunday points (can hide later if desired)
     u.mon   = monActual[i];
-  u.total = thursActual[i] + friActual[i] /* + satActual[i] + sunActual[i] */ + monActual[i];
+    u.total = thursActual[i] + friActual[i] + satActual[i] + sunActual[i] + monActual[i];
     delete u._thursProj; delete u._friProj; delete u._satProj; delete u._sunProj; delete u._monProj; delete u._projTotal;
   });
 
@@ -515,60 +514,14 @@ function liveGameCoverInfo(day, idx){
 }
 
 function renderPicksTable(day=picksDay){
-  // Override hook: if an admin sets window.FORCE_FULL_SATURDAY_REVEAL = true, ignore partialSatRevealCount (debug/override).
-  if(day==='Sat' && window.FORCE_FULL_SATURDAY_REVEAL===true){
-    window.partialSatRevealCount = (picksLabels['Sat']||[]).length;
-  }
-  // Requirement update: show scheduled games for Sat-Sun-Mon again (no kickoff-based hiding). Always render all defined columns for selected day.
   const tbl = document.getElementById('picksTable');
-  // Empty-state: if no users at all for the selected day, show a friendly hint instead of a totally blank table
   const userCount = users.length;
   if(userCount===0){
     tbl.innerHTML = '<tr><th class="th-small">Player</th><th class="th-small">Picks</th></tr>'+
-      '<tr><td colspan="2" style="text-align:center;padding:14px 10px;font-size:13px;color:#9fb2bf;">No '+day+' submissions yet. <a href="submit_thurs.html" style="color:#66ffa6;">Submit yours</a> to appear here.</td></tr>';
-    return;
-  }
-  // --- Saturday privacy: hide all Saturday picks until day is locked/final ---
-  // We still keep userPicks['Sat'] populated internally for scoring later, but we do not
-  // render individual selections to prevent copying.
-  if(day==='Sat' && window.SATURDAY_PUBLIC!==true){
-    // Partial reveal logic: if partialSatRevealCount defined and < total columns, show first N picks, mask remainder.
-    const totalCols = (picksLabels['Sat']||[]).length;
-    const revealN = Math.min(window.partialSatRevealCount||0, totalCols);
-    if(revealN===0){
-      const rows = users.map(u=> `<tr><td>${abbrevUser(u)}</td><td style="text-align:center;opacity:0.65;">Hidden</td></tr>`).join('');
-      tbl.innerHTML = '<tr><th class="th-small">Player</th><th class="th-small">Saturday Picks</th></tr>' +
-        '<tr><td colspan="2" style="text-align:center;padding:6px 10px;font-size:12px;color:#9fb2bf;">Saturday picks are hidden until results are posted.</td></tr>' + rows;
-      return;
-    }
-    // Build a multi-column table: first N real picks, then a single Hidden aggregate column (not per hidden pick) to avoid leaking distribution.
-    let header = '<tr><th class="th-small">Player</th>';
-    for(let i=0;i<revealN;i++){ header += `<th class="th-small">${headerAbbr('Sat',i)}</th>`; }
-    if(revealN < totalCols){ header += '<th class="th-small">(Remaining Picks Hidden)</th>'; }
-    header += '</tr>';
-    const rows = users.map(u=>{
-      const picks = (userPicks['Sat']&&userPicks['Sat'][u.username])||[];
-      let cells='';
-      for(let i=0;i<revealN;i++){
-        const rawPick = picks[i]||'-';
-        const cov = (coveredPicks['Sat']||[])[i];
-        let cls=''; if(cov){ if(cov==='PUSH') cls='push'; else if(picksMatch(rawPick,cov)) cls='hit'; else if(rawPick && rawPick!=='-') cls='miss'; }
-        cells += `<td class="${cls}">${lookupAbbr(rawPick)}</td>`;
-      }
-      if(revealN < totalCols){ cells += `<td style="text-align:center;opacity:0.6;">Hidden</td>`; }
-      return `<tr><td>${abbrevUser(u)}</td>${cells}</tr>`;
-    }).join('');
-    tbl.innerHTML = header + rows;
-    return;
-  }
-  if(day==='Sun'){
-    const rows = users.map(u=> `<tr><td>${abbrevUser(u)}</td><td style="text-align:center;opacity:0.65;">Hidden</td></tr>`).join('');
-    tbl.innerHTML = '<tr><th class="th-small">Player</th><th class="th-small">Sunday Picks</th></tr>' +
-      '<tr><td colspan="2" style="text-align:center;padding:6px 10px;font-size:12px;color:#9fb2bf;">Sunday picks are hidden until results are posted.</td></tr>' + rows;
+      '<tr><td colspan="2" style="text-align:center;padding:14px 10px;font-size:13px;color:#9fb2bf;">No '+day+' submissions yet.</td></tr>';
     return;
   }
   let labelCount = (picksLabels[day]||[]).length;
-  // Dynamic expansion: if picksLabels has fewer columns than any user's submitted picks for this day, expand to show them.
   const maxUserLenGeneric = Object.values(userPicks[day]||{}).reduce((m,arr)=> Math.max(m, Array.isArray(arr)?arr.length:0), 0);
   if(maxUserLenGeneric > labelCount) labelCount = maxUserLenGeneric;
   function statusFor(day, idx){
