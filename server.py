@@ -1331,6 +1331,38 @@ def admin_saturday_force_refill():
         'targetsFirstTwo': targets_state
     })
 
+@app.route('/api/admin/saturday/override_user', methods=['POST'])
+def admin_saturday_override_user():
+    """Admin: Hard override a single user's Saturday picks (partial or full).
+    Body: { email: str, picks: [..], token?: str }
+    Accepts shorter list (pads), longer list (truncates). Requires ADMIN_TOKEN if set.
+    Returns before/after for diff visibility.
+    """
+    token = request.args.get('token') or request.headers.get('X-Admin-Token')
+    admin_token = os.environ.get('ADMIN_TOKEN')
+    if admin_token and token != admin_token:
+        return jsonify({ 'ok': False, 'error': 'forbidden' }), 403
+    payload = request.get_json(force=True, silent=True) or {}
+    email = (payload.get('email') or '').strip().lower()
+    picks = payload.get('picks')
+    if not email:
+        return jsonify({ 'ok': False, 'error': 'email_required' }), 400
+    if not isinstance(picks, list):
+        return jsonify({ 'ok': False, 'error': 'picks_list_required' }), 400
+    # Normalize length
+    adj = [str(p or '').strip().upper() for p in picks]
+    if len(adj) > len(SATURDAY_LABELS):
+        adj = adj[:len(SATURDAY_LABELS)]
+    if len(adj) < len(SATURDAY_LABELS):
+        adj += ['']*(len(SATURDAY_LABELS)-len(adj))
+    # Before snapshot
+    before = SATURDAY_PICKS.get(email, ['']*len(SATURDAY_LABELS))[:]
+    SATURDAY_PICKS[email] = adj
+    if not _save_saturday(SATURDAY_PICKS):
+        return jsonify({ 'ok': False, 'error': 'persist_failed' }), 500
+    _refresh_all_users()
+    return jsonify({ 'ok': True, 'email': email, 'before': before, 'after': adj })
+
 # --- New Saturday per-game lock endpoints ---
 ADMIN_EMAIL = 'scire.ben@gmail.com'  # single admin (adjust if needed)
 
