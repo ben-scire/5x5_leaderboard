@@ -429,7 +429,7 @@ function updateLeaderboard(){
 // Saturday: inject finals once (always final now) & recalc immediately
 try {
   if(Array.isArray(coveredPicks['Sat'])){
-    const finals = ['Ohio State','Missouri','Oregon','Texas','Georgia','BYU'];
+  const finals = ['Ohio State','Missouri','Indiana','Texas','Georgia','BYU'];
     finals.forEach((f,i)=>{ if(!coveredPicks['Sat'][i]) coveredPicks['Sat'][i] = f; });
     recalcPoints('Sat');
     recalcTotal();

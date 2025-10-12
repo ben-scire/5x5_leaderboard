@@ -3,7 +3,7 @@
 from flask import Flask, jsonify, send_from_directory, request
 import time, os, json, pathlib
 
-VERSION = 'week-multi-8'  # remove manual Saturday overrides; final raw scores authoritative
+VERSION = 'week-multi-9'  # adjust Saturday Game 3 result (OREGON -> INDIANA)
 # Always treat Saturday JSON snapshot as authoritative; ignore CSV log auto-rebuilds.
 FORCE_SATURDAY_JSON = True  # previously env-driven; now permanently enabled
 RUNTIME_FORCE_SATURDAY_JSON = True  # runtime flag also locked on so reload logic always prefers JSON
@@ -16,7 +16,7 @@ FRIDAY_RESULTS = ['USF', 'WASH']
 SATURDAY_RESULTS = [
     'OHIO STATE',   # Game 1 final (Ohio State covers -15.5)
     'MISSOURI',     # Game 2 final (Missouri covers +3.5 vs Alabama)
-    'OREGON',       # Game 3 final (Oregon covers -7.5)
+    'INDIANA',      # Game 3 final (Indiana (+7.5) covers; replaces prior OREGON)
     'TEXAS',        # Game 4 final (Texas covers -2.5)
     'GEORGIA',      # Game 5 final (Georgia covers -4.5)
     'BYU'           # Game 6 final (BYU covers -2.5)
