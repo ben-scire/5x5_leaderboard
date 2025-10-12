@@ -815,33 +815,50 @@ def friday_log_latest():
 def _norm_team(val: str):
     if not val: return ''
     v = val.strip().upper()
-    # Basic synonym collapsing for fairness
-    # Handle short forms first
-    if v in ('MIZ', 'MIZZOU'):
-        v = 'MISSOURI'
-    v = v.replace('OHIO ST', 'OHIO STATE')
-    # Ensure any remaining variants of Missouri map correctly
-    v = v.replace('MISSOURI', 'MISSOURI')
-    # Abbreviation expansions (Saturday picks)
-    if v == 'ILL': v = 'ILLINOIS'
-    if v == 'ALA': v = 'ALABAMA'
-    if v == 'IND': v = 'INDIANA'
-    if v == 'ORE': v = 'OREGON'
-    if v == 'OKLA': v = 'OKLAHOMA'
-    if v == 'TEX': v = 'TEXAS'
-    if v == 'UGA': v = 'GEORGIA'
-    if v == 'AUB': v = 'AUBURN'
-    if v == 'ARIZ': v = 'ARIZONA'
-    v = v.replace('ALABAMA', 'ALABAMA')
-    v = v.replace('INDIANA', 'INDIANA')
-    v = v.replace('OREGON', 'OREGON')
-    v = v.replace('OKLAHOMA', 'OKLAHOMA')
-    v = v.replace('TEXAS', 'TEXAS')
-    v = v.replace('GEORGIA', 'GEORGIA')
-    v = v.replace('AUBURN', 'AUBURN')
-    v = v.replace('BYU', 'BYU')
-    v = v.replace('ARIZONA', 'ARIZONA')
-    return v
+    # Fast path exact matches already canonical
+    canonical = {
+        'OHIO STATE','MISSOURI','ILLINOIS','ALABAMA','INDIANA','OREGON','OKLAHOMA','TEXAS','GEORGIA','AUBURN','BYU','ARIZONA'
+    }
+    if v in canonical:
+        return v
+    # Alias map (tokens only). We split on whitespace and rejoin to limit accidental substring duplication.
+    alias = {
+        'OHIO':'OHIO', # do not alter
+        'OHIO ST':'OHIO STATE',
+        'MIZ':'MISSOURI','MIZZOU':'MISSOURI',
+        'ILL':'ILLINOIS',
+        'ALA':'ALABAMA',
+        'IND':'INDIANA',
+        'ORE':'OREGON',
+        'OKLA':'OKLAHOMA',
+        'TEX':'TEXAS',
+        'UGA':'GEORGIA',
+        'AUB':'AUBURN',
+        'ARIZ':'ARIZONA'
+    }
+    # Exact token replacement (preserve ordering of multi-word names)
+    parts = v.replace('&',' ').replace('.',' ').split()
+    for i,p in enumerate(parts):
+        # Reconstruct two-word pattern for "OHIO ST" specifically
+        if p == 'OHIO' and i+1 < len(parts) and parts[i+1] == 'ST':
+            parts[i] = 'OHIO STATE'
+            parts.pop(i+1)
+            break
+    v2 = ' '.join(alias.get(p, p) for p in parts)
+    # Second pass: direct alias if whole string still matches a key
+    if v2 in alias:
+        v2 = alias[v2]
+    return v2
+
+# One-time debug: verify Saturday results normalization (will not raise; prints to console once)
+try:
+    _sat_norm_check = [(_r, _norm_team(_r)) for _r in SATURDAY_RESULTS]
+    if any(a!=b for a,b in _sat_norm_check):
+        print('[SAT_DEBUG] Normalization adjusted results:', _sat_norm_check)
+    else:
+        print('[SAT_DEBUG] Saturday results normalized OK:', _sat_norm_check)
+except Exception as _e:
+    print('[SAT_DEBUG] normalization self-test failed', _e)
 
 def compute_scores():
     """Return sorted list of scoreboard entries for all users (Thu + Fri + Sat + Sun) with normalization."""
