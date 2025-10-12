@@ -426,16 +426,17 @@ function updateLeaderboard(){
   // Removed Live* legend chip logic.
 }
 
-// Saturday: inject finals once (always final now) & recalc immediately
+// Saturday: enforce authoritative finals array (overwrite any prior incorrect values, e.g. Oregon -> Indiana)
 try {
   if(Array.isArray(coveredPicks['Sat'])){
-  const finals = ['Ohio State','Missouri','Indiana','Texas','Georgia','BYU'];
-    finals.forEach((f,i)=>{ if(!coveredPicks['Sat'][i]) coveredPicks['Sat'][i] = f; });
+    const finals = ['Ohio State','Missouri','Indiana','Texas','Georgia','BYU'];
+    finals.forEach((f,i)=>{ coveredPicks['Sat'][i] = f; });
     recalcPoints('Sat');
     recalcTotal();
     updateLeaderboard();
+    console.log('[Sat Finals] Applied authoritative finals', finals);
   }
-} catch(_e){}
+} catch(_e){ console.warn('[Sat Finals] apply failed', _e); }
 
 // Admin helper: reveal Sunday picks & scoring
 window.revealSunday = function(){
