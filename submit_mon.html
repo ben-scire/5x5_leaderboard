@@ -56,6 +56,18 @@ const emailSelect = document.getElementById('email');
 const pinInput = document.getElementById('pin');
 const loadBtn = document.getElementById('loadBtn');
 const saveBtn = document.getElementById('saveBtn');
+// Helper to try multiple backend paths (Flask '/api/...' and Node '/picks/...')
+async function tryFetchJson(paths, options){
+  for(const p of paths){
+    try{
+      const r = await fetch(p, options);
+      if(!r.ok) continue;
+      const j = await r.json();
+      return { path:p, response:r, json:j };
+    }catch(_e){ /* try next */ }
+  }
+  return { path:null, response:null, json:null };
+}
 // Labels are fetched from the server to avoid duplication/mismatch with backend
 let LABELS = [];
 let START_TIMES = [];
@@ -94,9 +106,11 @@ function render(){
 async function loadLabels(){
   const host=document.getElementById('matchups');
   try {
-    const r = await fetch('/api/picks/monday/labels?ts=' + Date.now(), { cache: 'no-store' });
-    const j = await r.json();
-    if (r.ok && j && j.ok && Array.isArray(j.labels)) {
+    const { json:j } = await tryFetchJson([
+      '/api/picks/monday/labels?ts='+Date.now(),
+      '/picks/monday/labels?ts='+Date.now()
+    ], { cache:'no-store' });
+    if (j && (j.ok===true || typeof j.ok==='undefined') && Array.isArray(j.labels)) {
       // Deduplicate while preserving order
       const seen = new Set();
       LABELS = j.labels.filter(x=>{ if(seen.has(x)) return false; seen.add(x); return true; });
@@ -127,9 +141,11 @@ async function loadLabels(){
 async function loadTimes(){
   // Fetch schedule and map Monday game start times to each label index
   try {
-    const r = await fetch('/api/schedule', { cache: 'no-store' });
-    if(!r.ok) return;
-    const j = await r.json();
+    const { json:j } = await tryFetchJson([
+      '/api/schedule',
+      '/schedule'
+    ], { cache:'no-store' });
+    if(!j) return;
     const mon = j.days && (j.days.Mon || j.days.mon || j.days.MON);
     const games = (mon && Array.isArray(mon.games)) ? mon.games : [];
     const count = Math.min(LABELS.length, CHOICES.length);
@@ -163,7 +179,22 @@ async function loadExisting(){
   const status=document.getElementById('status');
   if(!email){ status.textContent='Enter email'; status.className='error'; return; }
   status.textContent='Loading...'; status.className='';
-  try { const r=await fetch('/api/picks/monday/get?email='+encodeURIComponent(email)); const j=await r.json(); if(j&&j.picks){ j.picks.forEach((v,i)=>{ const inp=document.querySelector(`input[data-idx='${i}']`); if(inp) inp.value=v; if(v){ const btn=document.querySelector(`button.mc[data-idx='${i}'][data-val='${v}']`); if(btn) btn.click(); } }); status.textContent='Loaded'; status.className='success'; } else { status.textContent='No existing picks'; } } catch(e){ status.textContent='Load failed'; status.className='error'; }
+  try {
+    // Try Flask GET first, then Node POST fallback
+    let j = null;
+    const first = await tryFetchJson(['/api/picks/monday/get?email='+encodeURIComponent(email)], {});
+    if(first.json && (first.json.ok===true || typeof first.json.ok==='undefined')) j = first.json;
+    if(!j){
+      const second = await tryFetchJson(['/picks/monday/user'], { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ email }) });
+      if(second.json) j = { picks: (second.json && second.json.picks)||[] };
+    }
+    if(j && Array.isArray(j.picks)){
+      j.picks.forEach((v,i)=>{ const inp=document.querySelector(`input[data-idx='${i}']`); if(inp) inp.value=v; if(v){ const btn=document.querySelector(`button.mc[data-idx='${i}'][data-val='${v}']`); if(btn) btn.click(); } });
+      status.textContent='Loaded'; status.className='success';
+    } else {
+      status.textContent='No existing picks';
+    }
+  } catch(e){ status.textContent='Load failed'; status.className='error'; }
 }
 async function savePicks(){
   const email=document.getElementById('email').value.trim().toLowerCase();
@@ -175,18 +206,55 @@ async function savePicks(){
   const picks=inputs.map(inp=> (inp.value||'').trim().toUpperCase());
   status.textContent='Saving...'; status.className='';
   try {
-    const r=await fetch('/api/picks/monday/submit',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({ email, pin, picks })
-    });
-    const j=await r.json();
-    if(!r.ok||!j.ok){ status.textContent=j.error||'Save failed'; status.className='error'; return;}
+    // Try Flask first
+    let ok=false; let err='';
+    try{
+      const r=await fetch('/api/picks/monday/submit',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ email, pin, picks }) });
+      const j=await r.json();
+      ok = r.ok && j && j.ok===true;
+      if(!ok) err = (j && j.error)||'';
+    }catch(_e){}
+    if(!ok){
+      // Fallback to Node server (no PIN; different route)
+      try {
+        const r2 = await fetch('/picks/monday',{ method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ userEmail: email, picks }) });
+        const j2 = await r2.json().catch(()=>({}));
+        ok = r2.ok && !!j2;
+      } catch(_e){}
+    }
+    if(!ok){ status.textContent= err || 'Save failed'; status.className='error'; return; }
     status.textContent='Saved'; status.className='success';
   } catch(e){ status.textContent='Save failed'; status.className='error'; }
 }
 async function loadStatus(){
-  try { const r=await fetch('/api/picks/monday/status?ts='+Date.now(),{cache:'no-store'}); if(!r.ok) throw 0; const j=await r.json(); if(!j.ok) throw 0; const sub=j.submitted||[], miss=j.missing||[]; const total=sub.length+miss.length; const pct= total? Math.round(sub.length/total*100):0; const frag = `<div style='margin-bottom:6px;'>Submitted: <span style='color:#66ffa6;font-weight:600;'>${sub.length}</span> / ${total} (${pct}%)</div>` + (sub.length? `<div style='margin-bottom:6px;'><span style='color:#66ffa6;font-weight:600;'>Submitted Emails</span><br>${sub.map(e=>`<span style='display:inline-block;margin:2px 6px 2px 0;padding:2px 6px;border-radius:4px;background:#1e2d24;color:#66ffa6;'>${e.split('@')[0]}</span>`).join('')}</div>`:'') + (miss.length? `<div style='margin-top:4px;'><span style='color:#ffb74d;font-weight:600;'>Missing</span><br>${miss.map(e=>`<span style='display:inline-block;margin:2px 6px 2px 0;padding:2px 6px;border-radius:4px;background:#332416;color:#ffcc80;'>${e.split('@')[0]}</span>`).join('')}</div>`:''); document.getElementById('monStatus').innerHTML=frag; } catch(e){ document.getElementById('monStatus').innerHTML='<span style="color:#ff6b6b;">Status load failed</span>'; }
+  try {
+    // Try Flask status, then Node status (submitted only)
+    let j = null;
+    let rFirst = await tryFetchJson(['/api/picks/monday/status?ts='+Date.now()], { cache:'no-store' });
+    if(rFirst.json && (rFirst.json.ok===true)) j = rFirst.json;
+    if(!j){
+      const rSecond = await tryFetchJson(['/picks/monday/status?ts='+Date.now()], { cache:'no-store' });
+      if(rSecond.json) j = rSecond.json;
+    }
+    if(!j){ throw new Error('no-status'); }
+    let sub = j.submitted || [];
+    let miss = j.missing || [];
+    if(!miss.length){
+      // Compute missing from allowed emails if Node only returned submitted
+      try {
+        const { json:em } = await tryFetchJson(['/api/pins/emails?ts='+Date.now()], { cache:'no-store' });
+        if(em && em.ok && Array.isArray(em.emails)){
+          const set = new Set(sub);
+          miss = em.emails.filter(e=> !set.has(e));
+        }
+      } catch(_e){}
+    }
+    const total=sub.length+miss.length; const pct= total? Math.round(sub.length/total*100):0;
+    const frag = `<div style='margin-bottom:6px;'>Submitted: <span style='color:#66ffa6;font-weight:600;'>${sub.length}</span> / ${total} (${pct}%)</div>`
+      + (sub.length? `<div style='margin-bottom:6px;'><span style='color:#66ffa6;font-weight:600;'>Submitted Emails</span><br>${sub.map(e=>`<span style='display:inline-block;margin:2px 6px 2px 0;padding:2px 6px;border-radius:4px;background:#1e2d24;color:#66ffa6;'>${e.split('@')[0]}</span>`).join('')}</div>`:'')
+      + (miss.length? `<div style='margin-top:4px;'><span style='color:#ffb74d;font-weight:600;'>Missing</span><br>${miss.map(e=>`<span style='display:inline-block;margin:2px 6px 2px 0;padding:2px 6px;border-radius:4px;background:#332416;color:#ffcc80;'>${e.split('@')[0]}</span>`).join('')}</div>`:'');
+    document.getElementById('monStatus').innerHTML=frag;
+  } catch(e){ document.getElementById('monStatus').innerHTML='<span style="color:#ff6b6b;">Status load failed</span>'; }
 }
 loadBtn.addEventListener('click', loadExisting);
 saveBtn.addEventListener('click', savePicks);
