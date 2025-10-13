@@ -316,8 +316,6 @@ def _check_pin(email: str, pin: str):
     return PIN_MAP.get(email.lower()) == pin
 TOTAL_POSSIBLE = len(RESULTS) + len(FRIDAY_RESULTS) + len(SATURDAY_RESULTS) + len(SUNDAY_RESULTS)
 
-app = Flask(__name__, static_folder='.', static_url_path='')
-
 # --- Cache control: prevent stale HTML on mobile Safari / iOS ---
 # Strategy:
 # 1. All HTML responses get no-store headers so updates are always fetched.
