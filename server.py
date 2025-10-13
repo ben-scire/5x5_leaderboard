@@ -1,3 +1,132 @@
+# ------------------ Monday (new) ------------------
+MONDAY_LABELS = [
+    'NFL: BUF -3.5 @ ATL (Spread)',
+    'NFL: BUF -3.5 @ ATL (Total O/U 49.5)',
+    'NFL: BUF -3.5 @ ATL (Prop: Bijan Robinson AND James Cook 60+ rushing yards EACH)',
+    'NFL: CHI +5.5 @ WSH (Spread)',
+    'NFL: CHI +5.5 @ WSH (Total O/U 48.5)',
+    'NFL: CHI +5.5 @ WSH (Prop: Jayden Daniels 40+ AND Caleb Williams 20+ rushing yards)'
+]
+MONDAY_FILE = pathlib.Path('data/picks/monday_picks.json')
+MONDAY_LOCK_FILE = pathlib.Path('data/picks/monday_locked.json')
+def _load_monday():
+    if MONDAY_FILE.exists():
+        try:
+            with MONDAY_FILE.open('r', encoding='utf-8') as f:
+                data = json.load(f)
+            if isinstance(data, dict):
+                out = {}
+                for email, picks in data.items():
+                    if isinstance(picks, list):
+                        adj = picks[:len(MONDAY_LABELS)]
+                        while len(adj) < len(MONDAY_LABELS):
+                            adj.append('')
+                        out[email] = [p.strip().upper() for p in adj]
+                return out
+        except Exception:
+            return {}
+    return {}
+def _save_monday(data: dict):
+    try:
+        MONDAY_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with MONDAY_FILE.open('w', encoding='utf-8') as f:
+            json.dump(data, f, indent=2)
+        return True
+    except Exception:
+        return False
+MONDAY_PICKS = _load_monday()
+def _refresh_monday():
+    global MONDAY_PICKS
+    MONDAY_PICKS = _load_monday()
+
+# Monday labels endpoint
+@app.route('/api/picks/monday/labels')
+def monday_labels():
+    return jsonify({ 'ok': True, 'labels': MONDAY_LABELS })
+
+# Monday get picks for user
+@app.route('/api/picks/monday/get')
+def monday_get():
+    email = (request.args.get('email') or '').strip().lower()
+    picks = MONDAY_PICKS.get(email)
+    return jsonify({ 'ok': True, 'email': email, 'picks': picks })
+
+# Monday submit picks
+@app.route('/api/picks/monday/submit', methods=['POST'])
+def monday_submit():
+    payload = request.get_json(force=True, silent=True) or {}
+    email = (payload.get('email') or '').strip().lower()
+    picks = payload.get('picks') or []
+    pin = str(payload.get('pin') or '').strip()
+    if not email:
+        return jsonify({ 'ok': False, 'error': 'email_required' }), 400
+    if email not in ALLOWED_EMAILS:
+        return jsonify({ 'ok': False, 'error': 'unauthorized_email' }), 403
+    if not _check_pin(email, pin):
+        return jsonify({ 'ok': False, 'error': 'invalid_pin' }), 403
+    if not isinstance(picks, list):
+        return jsonify({ 'ok': False, 'error': 'invalid_picks_type' }), 400
+    if len(picks) > len(MONDAY_LABELS): picks = picks[:len(MONDAY_LABELS)]
+    if len(picks) < len(MONDAY_LABELS): picks = picks + ['']*(len(MONDAY_LABELS)-len(picks))
+    updated = [str(val or '').strip().upper() for val in picks]
+    MONDAY_PICKS[email] = updated
+    if not _save_monday(MONDAY_PICKS):
+        return jsonify({ 'ok': False, 'error': 'persist_failed' }), 500
+    return jsonify({ 'ok': True, 'saved': True })
+
+# Monday status endpoint
+@app.route('/api/picks/monday/status')
+def monday_status():
+    _refresh_all_users()
+    submitted = sorted(MONDAY_PICKS.keys())
+    missing = [u for u in ALL_USERS if u not in MONDAY_PICKS]
+    return jsonify({ 'ok': True, 'submitted': submitted, 'missing': missing, 'submittedCount': len(submitted), 'missingCount': len(missing) })
+# --- Monday: Admin endpoint to view all submissions ---
+@app.route('/api/picks/monday/all')
+def monday_all():
+    """Admin: View all Monday picks submissions (raw, not auth-gated for now)."""
+    try:
+        MONDAY_FILE = pathlib.Path('data/picks/monday_picks.json')
+        if MONDAY_FILE.exists():
+            with MONDAY_FILE.open('r', encoding='utf-8') as f:
+                data = json.load(f)
+            return jsonify({ 'ok': True, 'picks': data })
+        else:
+            return jsonify({ 'ok': True, 'picks': {} })
+    except Exception as e:
+        return jsonify({ 'ok': False, 'error': str(e) })
+# ---- Admin: Hard override a single user's Sunday picks (partial or full) ----
+@app.route('/api/admin/sunday/override_user', methods=['POST'])
+def admin_sunday_override_user():
+    """Admin: Hard override a single user's Sunday picks (partial or full).
+    Body: { email: str, picks: [..], token?: str }
+    Accepts shorter list (pads), longer list (truncates). Requires ADMIN_TOKEN if set.
+    Returns before/after for diff visibility.
+    """
+    token = request.args.get('token') or request.headers.get('X-Admin-Token')
+    admin_token = os.environ.get('ADMIN_TOKEN')
+    if admin_token and token != admin_token:
+        return jsonify({ 'ok': False, 'error': 'forbidden' }), 403
+    payload = request.get_json(force=True, silent=True) or {}
+    email = (payload.get('email') or '').strip().lower()
+    picks = payload.get('picks')
+    if not email:
+        return jsonify({ 'ok': False, 'error': 'email_required' }), 400
+    if not isinstance(picks, list):
+        return jsonify({ 'ok': False, 'error': 'picks_list_required' }), 400
+    # Normalize length
+    adj = [str(p or '').strip().upper() for p in picks]
+    if len(adj) > len(SUNDAY_LABELS):
+        adj = adj[:len(SUNDAY_LABELS)]
+    if len(adj) < len(SUNDAY_LABELS):
+        adj += ['']*(len(SUNDAY_LABELS)-len(adj))
+    # Before snapshot
+    before = SUNDAY_PICKS.get(email, ['']*len(SUNDAY_LABELS))[:]
+    SUNDAY_PICKS[email] = adj
+    if not _save_sunday(SUNDAY_PICKS):
+        return jsonify({ 'ok': False, 'error': 'persist_failed' }), 500
+    _refresh_all_users()
+    return jsonify({ 'ok': True, 'email': email, 'before': before, 'after': adj })
 """Ultra-minimal Thursday-only leaderboard server (fully cleaned version)."""
 """Ultra-minimal Thursday-only leaderboard server (fully cleaned version)."""
 from flask import Flask, jsonify, send_from_directory, request
@@ -1517,6 +1646,40 @@ def _parse_iso_utc_sun(ts: str):
 
 SUNDAY_PICKS = _load_sunday()
 
+# --- Sunday autofill metadata tracking (which indices were auto-filled by server logic) ---
+# We store per-email boolean list (same length as SUNDAY_LABELS) where True indicates the pick
+# currently present was inserted automatically (e.g., NYJ backfill) *and has not yet been
+# explicitly submitted/overwritten by the user via /api/picks/sunday/submit*.
+SUNDAY_AUTOFILL_META_FILE = pathlib.Path('data/picks/sunday_autofill_meta.json')
+def _load_sunday_autofill_meta():
+    if SUNDAY_AUTOFILL_META_FILE.exists():
+        try:
+            with SUNDAY_AUTOFILL_META_FILE.open('r', encoding='utf-8') as f:
+                data = json.load(f)
+            if isinstance(data, dict):
+                out = {}
+                for email, flags in data.items():
+                    if isinstance(flags, list):
+                        adj = [bool(x) for x in flags[:len(SUNDAY_LABELS)]]
+                        while len(adj) < len(SUNDAY_LABELS):
+                            adj.append(False)
+                        out[email] = adj
+                return out
+        except Exception:
+            return {}
+    return {}
+
+def _save_sunday_autofill_meta():
+    try:
+        SUNDAY_AUTOFILL_META_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with SUNDAY_AUTOFILL_META_FILE.open('w', encoding='utf-8') as f:
+            json.dump(SUNDAY_AUTOFILL_META, f, indent=2)
+        return True
+    except Exception:
+        return False
+
+SUNDAY_AUTOFILL_META = _load_sunday_autofill_meta()
+
 # --- Sunday backfill: auto-fill Game 0 (DEN @ NYJ) with NYJ if blank so everyone gets a baseline pick
 def _sunday_backfill_game0_nyj():
     try:
@@ -1533,9 +1696,19 @@ def _sunday_backfill_game0_nyj():
             # Only backfill if truly blank
             if not picks[0]:
                 picks[0] = 'NYJ'
+                # Mark index 0 as auto-filled
+                flags = SUNDAY_AUTOFILL_META.get(email)
+                if not isinstance(flags, list):
+                    flags = [False]*len(SUNDAY_LABELS)
+                if len(flags) < len(SUNDAY_LABELS):
+                    flags.extend([False]*(len(SUNDAY_LABELS)-len(flags)))
+                if not flags[0]:  # only mark if newly auto-filled
+                    flags[0] = True
+                    SUNDAY_AUTOFILL_META[email] = flags
                 changed = True
         if changed:
             _save_sunday(SUNDAY_PICKS)
+            _save_sunday_autofill_meta()
             _refresh_all_users()
         return changed
     except Exception:
@@ -1639,6 +1812,21 @@ def sunday_submit():
         else:
             updated.append(str(val or '').strip().upper())
     SUNDAY_PICKS[email] = updated
+    # Update autofill metadata: any index the user now has a (possibly unchanged) non-blank value for becomes manual (False)
+    flags = SUNDAY_AUTOFILL_META.get(email)
+    if not isinstance(flags, list):
+        flags = [False]*len(SUNDAY_LABELS)
+    if len(flags) < len(SUNDAY_LABELS):
+        flags.extend([False]*(len(SUNDAY_LABELS)-len(flags)))
+    user_changed = False
+    for i, val in enumerate(updated):
+        if val:  # user submitted value (even if same as auto-fill) => treat as manual now
+            if flags[i]:
+                flags[i] = False
+                user_changed = True
+    if user_changed or email not in SUNDAY_AUTOFILL_META:
+        SUNDAY_AUTOFILL_META[email] = flags
+        _save_sunday_autofill_meta()
     if not _save_sunday(SUNDAY_PICKS):
         return jsonify({ 'ok': False, 'error': 'persist_failed' }), 500
     _append_sunday_csv(email, updated)
@@ -1661,6 +1849,41 @@ def sunday_all():
             if not val: continue
             d = counts[i]; d[val] = d.get(val,0)+1
     return jsonify({ 'ok': True, 'labels': SUNDAY_LABELS, 'totalSubmissions': len(SUNDAY_PICKS), 'picks': SUNDAY_PICKS, 'counts': counts, 'gameLocks': _sunday_effective_locks() })
+
+@app.route('/api/admin/sunday/autofill_report')
+def admin_sunday_autofill_report():
+    """Admin: report which Sunday picks were auto-filled vs user-submitted.
+    Returns per email: picks, autoFilledIndices, autoFilledCount, manualCount.
+    Requires ADMIN_TOKEN if configured.
+    """
+    token = request.args.get('token') or request.headers.get('X-Admin-Token')
+    admin_token = os.environ.get('ADMIN_TOKEN')
+    if admin_token and token != admin_token:
+        return jsonify({ 'ok': False, 'error': 'forbidden' }), 403
+    _maybe_reload_sunday(); _sunday_backfill_game0_nyj()
+    # Ensure metadata length consistency
+    for email in list(SUNDAY_PICKS.keys()):
+        flags = SUNDAY_AUTOFILL_META.get(email)
+        if not isinstance(flags, list):
+            flags = [False]*len(SUNDAY_LABELS)
+        if len(flags) < len(SUNDAY_LABELS):
+            flags.extend([False]*(len(SUNDAY_LABELS)-len(flags)))
+        if len(flags) > len(SUNDAY_LABELS):
+            flags = flags[:len(SUNDAY_LABELS)]
+        SUNDAY_AUTOFILL_META[email] = flags
+    entries = []
+    for email, picks in SUNDAY_PICKS.items():
+        flags = SUNDAY_AUTOFILL_META.get(email, [False]*len(SUNDAY_LABELS))
+        auto_idxs = [i for i, f in enumerate(flags) if f and picks[i]]
+        entries.append({
+            'email': email,
+            'picks': picks,
+            'autoFilledIndices': auto_idxs,
+            'autoFilledCount': len(auto_idxs),
+            'manualCount': sum(1 for i,v in enumerate(picks) if v and not flags[i]),
+            'flags': flags
+        })
+    return jsonify({ 'ok': True, 'labels': SUNDAY_LABELS, 'entries': entries, 'version': VERSION })
 
 def _admin_auth_sunday(payload):
     email = (payload.get('email') or '').strip().lower()

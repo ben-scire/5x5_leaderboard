@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Submit Monday Picks</title>
+<link rel="stylesheet" href="leaderboard.css?v=13">
+<style>
+body{font-family:Inter,Arial,sans-serif;background:#0f1419;color:#e5e5e5;padding:24px;}
+h1{margin-top:0;font-size:22px;}
+.card{background:#1b232c;border:1px solid #24303c;padding:20px;max-width:860px;border-radius:10px;box-shadow:0 4px 12px -4px #000;}
+label{display:block;font-size:13px;margin-bottom:4px;font-weight:600;color:#9cc4ff;}
+select,input[type=text],input[type=email]{width:100%;padding:8px 10px;border:1px solid #314355;background:#0f1419;color:#e5e5e5;border-radius:6px;font-size:14px;}
+button{background:#1976d2;color:#fff;font-weight:600;border:none;padding:10px 18px;border-radius:6px;cursor:pointer;transition:background .15s, box-shadow .15s;}
+button:disabled{background:#274865;opacity:.6;cursor:not-allowed;}
+button.mc{background:#233345;padding:10px 14px;font-size:13px;border:1px solid #35526b;border-radius:22px;letter-spacing:.5px;min-width:68px;text-transform:uppercase;position:relative;}
+button.mc:hover{background:#2d4660;}
+button.mc.selected{background:#00897b;border-color:#00bfa5;box-shadow:0 0 0 2px rgba(0,191,165,0.25);}
+button.mc.selected::after{content:'\2713';position:absolute;top:-6px;right:-6px;background:#00bfa5;color:#062a27;font-size:12px;width:20px;height:20px;display:flex;align-items:center;justify-content:center;border-radius:50%;box-shadow:0 2px 4px -2px #000;}
+.match{background:#152027;padding:12px 14px;border:1px solid #22323e;border-radius:10px;}
+.kickoff-badge{display:inline-block;margin-left:8px;background:#273643;color:#90caf9;font-size:11px;padding:2px 6px;border-radius:12px;font-weight:500;letter-spacing:.5px;}
+.btnrow{display:flex;gap:10px;flex-wrap:wrap;}
+#status{font-size:12px;margin-left:12px;color:#90caf9;}
+.note{font-size:12px;color:#888;margin-top:6px;}
+.success{color:#66ffa6;} .error{color:#ff6b6b;}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:16px;}
+</style>
+</head>
+<body>
+<h1>Monday Picks Submission</h1>
+<p style="font-size:13px;max-width:840px;">Select your picks for each Monday NFL matchup. You can modify a pick until that game locks (automatically at kickoff or manually via admin). Monday picks will remain hidden on the public board until reveal.</p>
+<div class="card">
+  <div class="row"><label>Email
+    <select id="email">
+      <option value="">Select your email</option>
+    </select>
+  </label></div>
+  <div class="row" style="max-width:200px;"><label>PIN <input id="pin" type="text" inputmode="numeric" pattern="\\d{4}" maxlength="4" placeholder="4-digit PIN" style="letter-spacing:2px;text-align:center;" /></label></div>
+  <div id="matchups" class="grid"></div>
+  <div class="row" style="margin-top:18px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+    <button id="loadBtn" type="button">Load Existing</button>
+    <button id="saveBtn" type="button">Save Picks</button>
+    <span id="status"></span>
+  </div>
+  <div class="note">Games lock individually at kickoff. Locked games display a red badge and cannot be changed.</div>
+  <div style="margin-top:22px;">
+    <div style="font-size:13px;font-weight:600;margin-bottom:6px;color:#9cc4ff;display:flex;align-items:center;gap:10px;">Monday Submission Status <button id="refreshStatus" type="button" style="background:#233345;border:1px solid #35526b;color:#9cc4ff;font-size:12px;padding:6px 10px;border-radius:6px;cursor:pointer;">Refresh</button></div>
+    <div id="monStatus" style="font-size:12px;line-height:1.5;background:#152027;border:1px solid #22323e;padding:10px 12px;border-radius:8px;max-height:260px;overflow:auto;"></div>
+  </div>
+</div>
+<p style="margin-top:28px;"><a href="leaderboard.html" style="color:#64b5f6;">Back to Leaderboard</a></p>
+<script>
+const LABELS = [
+  'NFL: BUF -3.5 @ ATL (Spread)',
+  'NFL: BUF -3.5 @ ATL (Total O/U 49.5)',
+  'NFL: BUF -3.5 @ ATL (Prop: Bijan Robinson AND James Cook 60+ rushing yards EACH)',
+  'NFL: CHI +5.5 @ WSH (Spread)',
+  'NFL: CHI +5.5 @ WSH (Total O/U 48.5)',
+  'NFL: CHI +5.5 @ WSH (Prop: Jayden Daniels 40+ AND Caleb Williams 20+ rushing yards)'
+];
+const CHOICES = [
+  ['BUF','ATL'],
+  ['OVER','UNDER'],
+  ['YES','NO'],
+  ['CHI','WSH'],
+  ['OVER','UNDER'],
+  ['YES','NO']
+];
+function render(){
+  const host=document.getElementById('matchups');
+  host.innerHTML = LABELS.map((lbl,i)=>{
+    const btns = CHOICES[i].map(t=>`<button type='button' class='mc' data-idx='${i}' data-val='${t}'>${t}</button>`).join('');
+    return `<div class='match'><div style='font-size:13px;font-weight:600;margin-bottom:6px;'>${lbl}</div><div class='btnrow' data-group='${i}'>${btns}</div><input type='hidden' data-idx='${i}' /></div>`;
+  }).join('');
+  host.querySelectorAll('button.mc').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      const b=e.currentTarget; const idx=b.getAttribute('data-idx');
+      host.querySelectorAll(`button.mc[data-idx='${idx}']`).forEach(o=>{ o.classList.remove('selected'); o.setAttribute('aria-pressed','false'); });
+      b.classList.add('selected'); b.setAttribute('aria-pressed','true');
+      const hidden = host.querySelector(`input[data-idx='${idx}']`); if(hidden) hidden.value = b.getAttribute('data-val');
+    });
+  });
+}
+render();
+async function loadExisting(){
+  const email=document.getElementById('email').value.trim().toLowerCase(); const status=document.getElementById('status');
+  if(!email){ status.textContent='Enter email'; status.className='error'; return; }
+  status.textContent='Loading...'; status.className='';
+  try { const r=await fetch('/api/picks/monday/get?email='+encodeURIComponent(email)); const j=await r.json(); if(j&&j.picks){ j.picks.forEach((v,i)=>{ const inp=document.querySelector(`input[data-idx='${i}']`); if(inp) inp.value=v; if(v){ const btn=document.querySelector(`button.mc[data-idx='${i}'][data-val='${v}']`); if(btn) btn.click(); } }); status.textContent='Loaded'; status.className='success'; } else { status.textContent='No existing picks'; } } catch(e){ status.textContent='Load failed'; status.className='error'; }
+}
+async function savePicks(){
+  const email=document.getElementById('email').value.trim().toLowerCase(); const pin=document.getElementById('pin').value.trim(); const status=document.getElementById('status');
+  if(!email){ status.textContent='Enter email'; status.className='error'; return; }
+  if(pin.length!==4){ status.textContent='Enter 4-digit PIN'; status.className='error'; return; }
+  const inputs=Array.from(document.querySelectorAll('input[data-idx]')); const picks=inputs.map(inp=> (inp.value||'').trim().toUpperCase());
+  status.textContent='Saving...'; status.className='';
+  try { const r=await fetch('/api/picks/monday/submit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ email, pin, picks })}); const j=await r.json(); if(!r.ok||!j.ok){ status.textContent=j.error||'Save failed'; status.className='error'; return;} status.textContent='Saved'; status.className='success'; } catch(e){ status.textContent='Save failed'; status.className='error'; }
+}
+async function loadStatus(){
+  try { const r=await fetch('/api/picks/monday/status?ts='+Date.now(),{cache:'no-store'}); if(!r.ok) throw 0; const j=await r.json(); if(!j.ok) throw 0; const sub=j.submitted||[], miss=j.missing||[]; const total=sub.length+miss.length; const pct= total? Math.round(sub.length/total*100):0; const frag = `<div style='margin-bottom:6px;'>Submitted: <span style='color:#66ffa6;font-weight:600;'>${sub.length}</span> / ${total} (${pct}%)</div>` + (sub.length? `<div style='margin-bottom:6px;'><span style='color:#66ffa6;font-weight:600;'>Submitted Emails</span><br>${sub.map(e=>`<span style='display:inline-block;margin:2px 6px 2px 0;padding:2px 6px;border-radius:4px;background:#1e2d24;color:#66ffa6;'>${e.split('@')[0]}</span>`).join('')}</div>`:'') + (miss.length? `<div style='margin-top:4px;'><span style='color:#ffb74d;font-weight:600;'>Missing</span><br>${miss.map(e=>`<span style='display:inline-block;margin:2px 6px 2px 0;padding:2px 6px;border-radius:4px;background:#332416;color:#ffcc80;'>${e.split('@')[0]}</span>`).join('')}</div>`:''); document.getElementById('monStatus').innerHTML=frag; } catch(e){ document.getElementById('monStatus').innerHTML='<span style="color:#ff6b6b;">Status load failed</span>'; }
+}
+document.getElementById('loadBtn').addEventListener('click', loadExisting);
+document.getElementById('saveBtn').addEventListener('click', savePicks);
+document.getElementById('refreshStatus').addEventListener('click', loadStatus);
+async function loadEmails(){ try { const r=await fetch('/api/pins/emails?ts='+Date.now()); const j=await r.json(); if(j.ok){ const sel=document.getElementById('email'); j.emails.forEach(e=>{ const opt=document.createElement('option'); opt.value=e; opt.textContent=e; sel.appendChild(opt); }); } } catch(e){} }
+setInterval(loadStatus, 20000);
+setTimeout(loadStatus,400);
+loadEmails();
+</script>
+</body>
+</html>
