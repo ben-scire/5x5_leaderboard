@@ -477,6 +477,17 @@ try {
   }
 } catch(_e){ console.warn('[Sat Finals] apply failed', _e); }
 
+// Sunday: enforce hard-coded finalized winners (disable any live/dynamic Sunday mutation)
+try {
+  const sunFinals = ['NYJ','PIT','MIA','LAR','NE','SEA','TB','KC'];
+  if(!Array.isArray(coveredPicks['Sun'])) coveredPicks['Sun'] = Array(sunFinals.length).fill(null);
+  sunFinals.forEach((f,i)=>{ coveredPicks['Sun'][i] = f; });
+  recalcPoints('Sun');
+  recalcTotal();
+  updateLeaderboard();
+  console.log('[Sun Finals] Applied authoritative finals', sunFinals);
+} catch(e){ console.warn('[Sun Finals] apply failed', e); }
+
 // Hard normalization pass: upgrade any raw user pick spelled exactly 'OHIO ST' to 'OHIO STATE'
 function normalizeOhioStatePicks(){
   try {
