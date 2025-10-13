@@ -35,7 +35,7 @@ button.mc.selected::after{content:'\2713';position:absolute;top:-6px;right:-6px;
       <option value="">Select your email</option>
     </select>
   </label></div>
-  <div class="row" style="max-width:200px;"><label>PIN <input id="pin" type="text" inputmode="numeric" pattern="\\d{4}" maxlength="4" placeholder="4-digit PIN" style="letter-spacing:2px;text-align:center;" /></label></div>
+  <!-- PIN field removed for Monday submission -->
   <div id="matchups" class="grid"></div>
   <div class="row" style="margin-top:18px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
     <button id="loadBtn" type="button">Load Existing</button>
@@ -89,12 +89,21 @@ async function loadExisting(){
   try { const r=await fetch('/api/picks/monday/get?email='+encodeURIComponent(email)); const j=await r.json(); if(j&&j.picks){ j.picks.forEach((v,i)=>{ const inp=document.querySelector(`input[data-idx='${i}']`); if(inp) inp.value=v; if(v){ const btn=document.querySelector(`button.mc[data-idx='${i}'][data-val='${v}']`); if(btn) btn.click(); } }); status.textContent='Loaded'; status.className='success'; } else { status.textContent='No existing picks'; } } catch(e){ status.textContent='Load failed'; status.className='error'; }
 }
 async function savePicks(){
-  const email=document.getElementById('email').value.trim().toLowerCase(); const pin=document.getElementById('pin').value.trim(); const status=document.getElementById('status');
+  const email=document.getElementById('email').value.trim().toLowerCase(); const status=document.getElementById('status');
   if(!email){ status.textContent='Enter email'; status.className='error'; return; }
-  if(pin.length!==4){ status.textContent='Enter 4-digit PIN'; status.className='error'; return; }
-  const inputs=Array.from(document.querySelectorAll('input[data-idx]')); const picks=inputs.map(inp=> (inp.value||'').trim().toUpperCase());
+  const inputs=Array.from(document.querySelectorAll('input[data-idx]'));
+  const picks=inputs.map(inp=> (inp.value||'').trim().toUpperCase());
   status.textContent='Saving...'; status.className='';
-  try { const r=await fetch('/api/picks/monday/submit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ email, pin, picks })}); const j=await r.json(); if(!r.ok||!j.ok){ status.textContent=j.error||'Save failed'; status.className='error'; return;} status.textContent='Saved'; status.className='success'; } catch(e){ status.textContent='Save failed'; status.className='error'; }
+  try {
+    const r=await fetch('/api/picks/monday/submit',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ email, picks })
+    });
+    const j=await r.json();
+    if(!r.ok||!j.ok){ status.textContent=j.error||'Save failed'; status.className='error'; return;}
+    status.textContent='Saved'; status.className='success';
+  } catch(e){ status.textContent='Save failed'; status.className='error'; }
 }
 async function loadStatus(){
   try { const r=await fetch('/api/picks/monday/status?ts='+Date.now(),{cache:'no-store'}); if(!r.ok) throw 0; const j=await r.json(); if(!j.ok) throw 0; const sub=j.submitted||[], miss=j.missing||[]; const total=sub.length+miss.length; const pct= total? Math.round(sub.length/total*100):0; const frag = `<div style='margin-bottom:6px;'>Submitted: <span style='color:#66ffa6;font-weight:600;'>${sub.length}</span> / ${total} (${pct}%)</div>` + (sub.length? `<div style='margin-bottom:6px;'><span style='color:#66ffa6;font-weight:600;'>Submitted Emails</span><br>${sub.map(e=>`<span style='display:inline-block;margin:2px 6px 2px 0;padding:2px 6px;border-radius:4px;background:#1e2d24;color:#66ffa6;'>${e.split('@')[0]}</span>`).join('')}</div>`:'') + (miss.length? `<div style='margin-top:4px;'><span style='color:#ffb74d;font-weight:600;'>Missing</span><br>${miss.map(e=>`<span style='display:inline-block;margin:2px 6px 2px 0;padding:2px 6px;border-radius:4px;background:#332416;color:#ffcc80;'>${e.split('@')[0]}</span>`).join('')}</div>`:''); document.getElementById('monStatus').innerHTML=frag; } catch(e){ document.getElementById('monStatus').innerHTML='<span style="color:#ff6b6b;">Status load failed</span>'; }

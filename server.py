@@ -1,5 +1,6 @@
 # ------------------ Monday (new) ------------------
 import pathlib
+## ...existing code... (Flask import and app creation now at top)
 MONDAY_LABELS = [
     'NFL: BUF -3.5 @ ATL (Spread)',
     'NFL: BUF -3.5 @ ATL (Total O/U 49.5)',
@@ -52,19 +53,26 @@ def monday_get():
     picks = MONDAY_PICKS.get(email)
     return jsonify({ 'ok': True, 'email': email, 'picks': picks })
 
-# Monday submit picks
+import pathlib
+from flask import Flask, jsonify, send_from_directory, request
+
+VERSION = 'week-multi-24'  # Fix Sunday ordering: restore NE before LAR to match stored user picks
+# Always treat Saturday JSON snapshot as authoritative; ignore CSV log auto-rebuilds.
+FORCE_SATURDAY_JSON = True  # previously env-driven; now permanently enabled
+RUNTIME_FORCE_SATURDAY_JSON = True  # runtime flag also locked on so reload logic always prefers JSON
+
+app = Flask(__name__, static_folder='.', static_url_path='')
+
+# ------------------ Monday (new) ------------------
 @app.route('/api/picks/monday/submit', methods=['POST'])
 def monday_submit():
     payload = request.get_json(force=True, silent=True) or {}
     email = (payload.get('email') or '').strip().lower()
     picks = payload.get('picks') or []
-    pin = str(payload.get('pin') or '').strip()
     if not email:
         return jsonify({ 'ok': False, 'error': 'email_required' }), 400
     if email not in ALLOWED_EMAILS:
         return jsonify({ 'ok': False, 'error': 'unauthorized_email' }), 403
-    if not _check_pin(email, pin):
-        return jsonify({ 'ok': False, 'error': 'invalid_pin' }), 403
     if not isinstance(picks, list):
         return jsonify({ 'ok': False, 'error': 'invalid_picks_type' }), 400
     if len(picks) > len(MONDAY_LABELS): picks = picks[:len(MONDAY_LABELS)]
