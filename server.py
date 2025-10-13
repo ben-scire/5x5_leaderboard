@@ -3,7 +3,7 @@
 from flask import Flask, jsonify, send_from_directory, request
 import time, os, json, pathlib
 
-VERSION = 'week-multi-21'  # Sunday adjustment: backfill NYJ game0 + set winners NYJ,PIT,MIA,LAR,NE,SEA; reorder NE/LAR games
+VERSION = 'week-multi-22'  # Sunday: mark TB final for game 6, leave DET@KC pending
 # Always treat Saturday JSON snapshot as authoritative; ignore CSV log auto-rebuilds.
 FORCE_SATURDAY_JSON = True  # previously env-driven; now permanently enabled
 RUNTIME_FORCE_SATURDAY_JSON = True  # runtime flag also locked on so reload logic always prefers JSON
@@ -26,10 +26,10 @@ SUNDAY_RESULTS = [
     'NYJ',  # Game 0 DEN @ NYJ (final)
     'PIT',  # Game 1 CLE @ PIT (final)
     'MIA',  # Game 2 LAC @ MIA (final)
-    'LAR',  # Game 3 now LAR @ BAL (final)
-    'NE',   # Game 4 now NE @ NO (final)
+    'LAR',  # Game 3 LAR @ BAL (final)
+    'NE',   # Game 4 NE @ NO (final)
     'SEA',  # Game 5 SEA @ JAX (final)
-    None,   # Game 6 SF @ TB (pending) -- TB result cleared until confirmed
+    'TB',   # Game 6 SF @ TB (final)
     None    # Game 7 DET @ KC (pending)
 ]
 
