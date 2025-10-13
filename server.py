@@ -202,6 +202,41 @@ def _latest_from_csv_log(log_path: pathlib.Path, expected_picks: int):
         return {}
     return latest
 
+def _read_node_monday(expected_picks: int):
+    """Read legacy Node server Monday submissions from data/mondayPicks.json, if present.
+    Returns dict email -> { 'picks': [...], 'ts': ts_iso or None }.
+    """
+    node_path = pathlib.Path('data/mondayPicks.json')
+    if not node_path.exists():
+        return {}
+    try:
+        with node_path.open('r', encoding='utf-8') as f:
+            raw = json.load(f)
+        out = {}
+        if isinstance(raw, dict):
+            for email, rec in raw.items():
+                picks = []
+                ts_iso = None
+                if isinstance(rec, dict):
+                    rp = rec.get('picks')
+                    if isinstance(rp, list):
+                        picks = [str(p or '').strip().upper() for p in rp]
+                    ts = rec.get('ts')
+                    try:
+                        # Node stored ts as milliseconds since epoch
+                        if isinstance(ts, (int, float)):
+                            ts_iso = time.strftime('%Y-%m-%dT%H:%M:%S', time.gmtime(ts/1000.0))
+                    except Exception:
+                        ts_iso = None
+                # normalize length
+                picks = picks[:expected_picks]
+                while len(picks) < expected_picks:
+                    picks.append('')
+                out[str(email).strip().lower()] = { 'picks': picks, 'ts': ts_iso }
+        return out
+    except Exception:
+        return {}
+
 @app.route('/api/picks/submissions')
 def submissions_latest():
     """Return latest submissions with timestamps for a given day (Thu, Fri, Sat, Sun, Mon). Query: ?day=Mon."""
@@ -223,9 +258,14 @@ def submissions_latest():
         resp['entries'] = [ { 'email': e, **rec } for e, rec in sorted(data.items()) ]
         return jsonify(resp)
     if day.startswith('mon'):
+        # Prefer CSV log if present, else try legacy Node JSON, else fallback to current JSON without timestamps
         data = _latest_from_csv_log(MONDAY_CSV_LOG, len(MONDAY_LABELS))
         if not data:
-            data = { e: { 'picks': MONDAY_PICKS.get(e, []), 'ts': None } for e in MONDAY_PICKS.keys() }
+            node_data = _read_node_monday(len(MONDAY_LABELS))
+            if node_data:
+                data = node_data
+            else:
+                data = { e: { 'picks': MONDAY_PICKS.get(e, []), 'ts': None } for e in MONDAY_PICKS.keys() }
         resp['entries'] = [ { 'email': e, **rec } for e, rec in sorted(data.items()) ]
         return jsonify(resp)
     if day.startswith('thu'):
@@ -237,6 +277,13 @@ def submissions_latest():
         resp['entries'] = [ { 'email': e, 'picks': SATURDAY_PICKS.get(e, []), 'ts': None } for e in sorted(SATURDAY_PICKS.keys()) ]
         return jsonify(resp)
     return jsonify({ 'ok': False, 'error': 'unsupported_day' }), 400
+
+
+# Legacy view: expose Node server's Monday JSON (read-only), if it exists
+@app.route('/api/picks/monday/legacy')
+def monday_legacy_view():
+    data = _read_node_monday(len(MONDAY_LABELS))
+    return jsonify({ 'ok': True, 'entries': [ { 'email': e, **rec } for e, rec in sorted(data.items()) ], 'source': 'data/mondayPicks.json' if data else None })
 
 
 
