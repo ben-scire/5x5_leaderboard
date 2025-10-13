@@ -53,12 +53,55 @@ def _refresh_monday():
 def monday_labels():
     return jsonify({ 'ok': True, 'labels': MONDAY_LABELS })
 
+
 # Monday get picks for user
 @app.route('/api/picks/monday/get')
 def monday_get():
     email = (request.args.get('email') or '').strip().lower()
     picks = MONDAY_PICKS.get(email)
     return jsonify({ 'ok': True, 'email': email, 'picks': picks })
+
+# Monday submit picks for user
+@app.route('/api/picks/monday/submit', methods=['POST'])
+def monday_submit():
+    payload = request.get_json(force=True, silent=True) or {}
+    email = (payload.get('email') or '').strip().lower()
+    picks = payload.get('picks')
+    if not email:
+        return jsonify({ 'ok': False, 'error': 'email_required' }), 400
+    if not isinstance(picks, list):
+        return jsonify({ 'ok': False, 'error': 'picks_list_required' }), 400
+    adj = [str(p or '').strip().upper() for p in picks]
+    if len(adj) > len(MONDAY_LABELS):
+        adj = adj[:len(MONDAY_LABELS)]
+    if len(adj) < len(MONDAY_LABELS):
+        adj += [''] * (len(MONDAY_LABELS) - len(adj))
+    before = MONDAY_PICKS.get(email, [''] * len(MONDAY_LABELS))[:]
+    MONDAY_PICKS[email] = adj
+    if not _save_monday(MONDAY_PICKS):
+        return jsonify({ 'ok': False, 'error': 'persist_failed' }), 500
+    _refresh_monday()
+    return jsonify({ 'ok': True, 'email': email, 'before': before, 'after': adj })
+
+# Monday status endpoint
+@app.route('/api/picks/monday/status')
+def monday_status():
+    # List of all allowed emails
+    emails = set()
+    try:
+        from flask import current_app
+        emails = set(current_app.config.get('ALLOWED_EMAILS', []))
+    except Exception:
+        pass
+    if not emails:
+        # fallback to global ALLOWED_EMAILS if available
+        try:
+            emails = set(ALLOWED_EMAILS)
+        except Exception:
+            emails = set(MONDAY_PICKS.keys())
+    submitted = [e for e in emails if e in MONDAY_PICKS and any(MONDAY_PICKS[e])]
+    missing = [e for e in emails if e not in MONDAY_PICKS or not any(MONDAY_PICKS[e])]
+    return jsonify({ 'ok': True, 'submitted': submitted, 'missing': missing })
 
 
 
