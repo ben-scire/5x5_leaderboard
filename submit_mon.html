@@ -38,8 +38,17 @@ button.mc.selected::after{content:'\2713';position:absolute;top:-6px;right:-6px;
   <!-- PIN field removed for Monday submission -->
   <div id="matchups" class="grid"></div>
   <div class="row" style="margin-top:18px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
-    <button id="loadBtn" type="button">Load Existing</button>
-    <button id="saveBtn" type="button">Save Picks</button>
+  <button id="loadBtn" type="button" disabled>Load Existing</button>
+  <button id="saveBtn" type="button" disabled>Save Picks</button>
+// Enable/disable buttons based on email selection
+const emailSelect = document.getElementById('email');
+const loadBtn = document.getElementById('loadBtn');
+const saveBtn = document.getElementById('saveBtn');
+emailSelect.addEventListener('change', function() {
+  const hasEmail = emailSelect.value && emailSelect.value.trim() !== '';
+  loadBtn.disabled = !hasEmail;
+  saveBtn.disabled = !hasEmail;
+});
     <span id="status"></span>
   </div>
   <div class="note">Games lock individually at kickoff. Locked games display a red badge and cannot be changed.</div>
@@ -108,8 +117,8 @@ async function savePicks(){
 async function loadStatus(){
   try { const r=await fetch('/api/picks/monday/status?ts='+Date.now(),{cache:'no-store'}); if(!r.ok) throw 0; const j=await r.json(); if(!j.ok) throw 0; const sub=j.submitted||[], miss=j.missing||[]; const total=sub.length+miss.length; const pct= total? Math.round(sub.length/total*100):0; const frag = `<div style='margin-bottom:6px;'>Submitted: <span style='color:#66ffa6;font-weight:600;'>${sub.length}</span> / ${total} (${pct}%)</div>` + (sub.length? `<div style='margin-bottom:6px;'><span style='color:#66ffa6;font-weight:600;'>Submitted Emails</span><br>${sub.map(e=>`<span style='display:inline-block;margin:2px 6px 2px 0;padding:2px 6px;border-radius:4px;background:#1e2d24;color:#66ffa6;'>${e.split('@')[0]}</span>`).join('')}</div>`:'') + (miss.length? `<div style='margin-top:4px;'><span style='color:#ffb74d;font-weight:600;'>Missing</span><br>${miss.map(e=>`<span style='display:inline-block;margin:2px 6px 2px 0;padding:2px 6px;border-radius:4px;background:#332416;color:#ffcc80;'>${e.split('@')[0]}</span>`).join('')}</div>`:''); document.getElementById('monStatus').innerHTML=frag; } catch(e){ document.getElementById('monStatus').innerHTML='<span style="color:#ff6b6b;">Status load failed</span>'; }
 }
-document.getElementById('loadBtn').addEventListener('click', loadExisting);
-document.getElementById('saveBtn').addEventListener('click', savePicks);
+loadBtn.addEventListener('click', loadExisting);
+saveBtn.addEventListener('click', savePicks);
 document.getElementById('refreshStatus').addEventListener('click', loadStatus);
 async function loadEmails(){ try { const r=await fetch('/api/pins/emails?ts='+Date.now()); const j=await r.json(); if(j.ok){ const sel=document.getElementById('email'); j.emails.forEach(e=>{ const opt=document.createElement('option'); opt.value=e; opt.textContent=e; sel.appendChild(opt); }); } } catch(e){} }
 setInterval(loadStatus, 20000);
