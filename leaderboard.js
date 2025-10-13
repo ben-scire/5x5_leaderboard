@@ -367,11 +367,8 @@ function updateLeaderboard(){
   const thursActual = users.map(u=> pointsForDay('Thu', u));
   const friActual   = users.map(u=> pointsForDay('Fri', u));
   const satActual   = users.map(u=> pointsForDay('Sat', u));
-  // Sunday: show 1 point per answered pick (visualizing all submitted Sunday picks regardless of result)
-  const sunActual   = users.map(u=>{
-    const picks = (userPicks['Sun'] && userPicks['Sun'][u.username]) || [];
-    return picks.reduce((c,p)=> c + (p ? 1 : 0), 0);
-  });
+  // Sunday: use actual scored correct picks (hits only)
+  const sunActual   = users.map(u=> pointsForDay('Sun', u));
   const monActual   = users.map(u=> pointsForDay('Mon', u));
 
   // Only actual values used (projections removed)
@@ -387,7 +384,7 @@ function updateLeaderboard(){
     u.fri   = friActual[i];
   const rawSat = satActual[i];
   u.sat   = Math.min(6, Math.max(0, rawSat));
-  u.sun   = sunActual[i]; // represents answered Sunday picks, not scored hits
+  u.sun   = sunActual[i]; // actual correct Sunday picks
     u.mon   = monActual[i];
     u.total = u.thurs + u.fri + u.sat + u.sun + u.mon;
     delete u._thursProj; delete u._friProj; delete u._satProj; delete u._sunProj; delete u._monProj; delete u._projTotal;
@@ -440,7 +437,7 @@ function updateLeaderboard(){
     { label:'Thu', data: thursVals, backgroundColor:DAY_COLORS.Thu.fill, borderColor:'#ffffff', borderWidth:1, barThickness, borderRadius:4, borderSkipped:false, stack:'points' },
     { label:'Fri', data: friVals, backgroundColor:DAY_COLORS.Fri.fill, borderColor:'#ffffff', borderWidth:1, barThickness, borderRadius:4, borderSkipped:false, stack:'points' },
     { label:'Sat', data: satVals, backgroundColor:DAY_COLORS.Sat.fill, borderColor:'#ffffff', borderWidth:1, barThickness, borderRadius:4, borderSkipped:false, stack:'points' },
-  { label:'Sun (Answered)', data: sunVals, backgroundColor:DAY_COLORS.Sun.fill, borderColor:'#ffffff', borderWidth:1, barThickness, borderRadius:4, borderSkipped:false, stack:'points' },
+  { label:'Sun', data: sunVals, backgroundColor:DAY_COLORS.Sun.fill, borderColor:'#ffffff', borderWidth:1, barThickness, borderRadius:4, borderSkipped:false, stack:'points' },
     { label:'Mon', data: monVals, backgroundColor:DAY_COLORS.Mon.fill, borderColor:'#ffffff', borderWidth:1, barThickness, borderRadius:4, borderSkipped:false, stack:'points' }
   ];
   const expectedCount = datasets.length;
