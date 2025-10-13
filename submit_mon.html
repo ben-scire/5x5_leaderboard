@@ -24,6 +24,8 @@ button.mc.selected::after{content:'\2713';position:absolute;top:-6px;right:-6px;
 .note{font-size:12px;color:#888;margin-top:6px;}
 .success{color:#66ffa6;} .error{color:#ff6b6b;}
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:16px;}
+.row{margin:8px 0;}
+.lock-banner{position:absolute;top:6px;right:10px;background:#c62828;color:#fff;font-size:10px;font-weight:600;padding:2px 6px;border-radius:4px;letter-spacing:1px;}
 </style>
 </head>
 <body>
@@ -38,10 +40,9 @@ button.mc.selected::after{content:'\2713';position:absolute;top:-6px;right:-6px;
   <div class="row" style="max-width:200px;"><label>PIN <input id="pin" type="text" inputmode="numeric" pattern="\\d{4}" maxlength="4" placeholder="4-digit PIN" style="letter-spacing:2px;text-align:center;" /></label></div>
   <div id="matchups" class="grid"></div>
   <div class="row" style="margin-top:18px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
-  <button id="loadBtn" type="button" disabled>Load Existing</button>
-  <button id="saveBtn" type="button" disabled>Save Picks</button>
+  <button id="loadBtn" type="button">Load Existing</button>
+  <button id="saveBtn" type="button">Save Picks</button>
   <span id="status"></span>
-    <span id="status"></span>
   </div>
   <div class="note">Games lock individually at kickoff. Locked games display a red badge and cannot be changed.</div>
   <div style="margin-top:22px;">
@@ -51,28 +52,13 @@ button.mc.selected::after{content:'\2713';position:absolute;top:-6px;right:-6px;
 </div>
 <p style="margin-top:28px;"><a href="leaderboard.html" style="color:#64b5f6;">Back to Leaderboard</a></p>
 <script>
-// Enable/disable Save/Load buttons based on email and PIN (mimic Sunday logic)
 const emailSelect = document.getElementById('email');
 const pinInput = document.getElementById('pin');
 const loadBtn = document.getElementById('loadBtn');
 const saveBtn = document.getElementById('saveBtn');
-function updateButtonState() {
-  const hasEmail = emailSelect.value && emailSelect.value.trim() !== '';
-  const hasPin = pinInput.value && pinInput.value.trim().length === 4;
-  loadBtn.disabled = !hasEmail || !hasPin;
-  saveBtn.disabled = !hasEmail || !hasPin;
-}
-emailSelect.addEventListener('change', updateButtonState);
-pinInput.addEventListener('input', updateButtonState);
-setTimeout(updateButtonState, 500);
-const LABELS = [
-  'NFL: BUF -3.5 @ ATL (Spread)',
-  'NFL: BUF -3.5 @ ATL (Total O/U 49.5)',
-  'NFL: BUF -3.5 @ ATL (Prop: Bijan Robinson AND James Cook 60+ rushing yards EACH)',
-  'NFL: CHI +5.5 @ WSH (Spread)',
-  'NFL: CHI +5.5 @ WSH (Total O/U 48.5)',
-  'NFL: CHI +5.5 @ WSH (Prop: Jayden Daniels OR Caleb Williams Anytime rush/rec TD)'
-];
+// Labels are fetched from the server to avoid duplication/mismatch with backend
+let LABELS = [];
+let START_TIMES = [];
 const CHOICES = [
   ['BUF','ATL'],
   ['OVER','UNDER'],
@@ -81,11 +67,19 @@ const CHOICES = [
   ['OVER','UNDER'],
   ['YES','NO']
 ];
+function fmtET(iso){ if(!iso) return ''; try { const d = new Date(iso); return d.toLocaleTimeString([], { hour:'numeric', minute:'2-digit', hour12:true, timeZone:'America/New_York' }).replace(':00','')+' ET'; } catch(e){ return ''; } }
+
 function render(){
   const host=document.getElementById('matchups');
-  host.innerHTML = LABELS.map((lbl,i)=>{
+  if (!Array.isArray(LABELS) || LABELS.length === 0) {
+    host.innerHTML = "<div style='color:#90caf9;'>Loading Monday matchups…</div>";
+    return;
+  }
+  const count = Math.min(LABELS.length, CHOICES.length);
+  host.innerHTML = LABELS.slice(0, count).map((lbl,i)=>{
     const btns = CHOICES[i].map(t=>`<button type='button' class='mc' data-idx='${i}' data-val='${t}'>${t}</button>`).join('');
-    return `<div class='match'><div style='font-size:13px;font-weight:600;margin-bottom:6px;'>${lbl}</div><div class='btnrow' data-group='${i}'>${btns}</div><input type='hidden' data-idx='${i}' /></div>`;
+    const ko = fmtET(START_TIMES[i]);
+    return `<div class='match'><div style='font-size:13px;font-weight:600;margin-bottom:6px;'>${lbl}${ko?` <span class='kickoff-badge'>${ko}</span>`:''}</div><div class='btnrow' data-group='${i}'>${btns}</div><input type='hidden' data-idx='${i}' /></div>`;
   }).join('');
   host.querySelectorAll('button.mc').forEach(btn=>{
     btn.addEventListener('click', e=>{
@@ -96,13 +90,78 @@ function render(){
     });
   });
 }
-render();
+
+async function loadLabels(){
+  const host=document.getElementById('matchups');
+  try {
+    const r = await fetch('/api/picks/monday/labels?ts=' + Date.now(), { cache: 'no-store' });
+    const j = await r.json();
+    if (r.ok && j && j.ok && Array.isArray(j.labels)) {
+      // Deduplicate while preserving order
+      const seen = new Set();
+      LABELS = j.labels.filter(x=>{ if(seen.has(x)) return false; seen.add(x); return true; });
+    } else {
+      // Fallback to prior hardcoded labels if endpoint fails
+      LABELS = [
+        'NFL: BUF -3.5 @ ATL (Spread)',
+        'NFL: BUF -3.5 @ ATL (Total O/U 49.5)',
+        'NFL: BUF -3.5 @ ATL (Prop: Bijan Robinson AND James Cook 60+ rushing yards EACH)',
+        'NFL: CHI +5.5 @ WSH (Spread)',
+        'NFL: CHI +5.5 @ WSH (Total O/U 48.5)',
+        'NFL: CHI +5.5 @ WSH (Prop: Jayden Daniels OR Caleb Williams Anytime rush/rec TD)'
+      ];
+    }
+  } catch(e){
+    LABELS = [
+      'NFL: BUF -3.5 @ ATL (Spread)',
+      'NFL: BUF -3.5 @ ATL (Total O/U 49.5)',
+      'NFL: BUF -3.5 @ ATL (Prop: Bijan Robinson AND James Cook 60+ rushing yards EACH)',
+      'NFL: CHI +5.5 @ WSH (Spread)',
+      'NFL: CHI +5.5 @ WSH (Total O/U 48.5)',
+      'NFL: CHI +5.5 @ WSH (Prop: Jayden Daniels OR Caleb Williams Anytime rush/rec TD)'
+    ];
+  }
+  render();
+}
+
+async function loadTimes(){
+  // Fetch schedule and map Monday game start times to each label index
+  try {
+    const r = await fetch('/api/schedule', { cache: 'no-store' });
+    if(!r.ok) return;
+    const j = await r.json();
+    const mon = j.days && (j.days.Mon || j.days.mon || j.days.MON);
+    const games = (mon && Array.isArray(mon.games)) ? mon.games : [];
+    const count = Math.min(LABELS.length, CHOICES.length);
+    const times = new Array(count).fill('');
+    if(games.length){
+      // Try to match by team abbreviations included in the label text (e.g., BUF @ ATL)
+      for(let i=0;i<count;i++){
+        const lbl = LABELS[i]||'';
+        let matched = false;
+        for(const g of games){
+          const a = (g.awayAbbr||'').toUpperCase();
+          const h = (g.homeAbbr||'').toUpperCase();
+          if(a && h && lbl.toUpperCase().includes(a+' ') && lbl.toUpperCase().includes(' @ '+h)){
+            times[i] = g.start || g.startTime || '';
+            matched = true; break;
+          }
+        }
+        // Fallback grouping if no explicit match
+        if(!matched){
+          if(games.length===1){ times[i] = games[0].start || games[0].startTime || ''; }
+          else if(games.length>=2){ times[i] = (i < Math.ceil(count/2)) ? (games[0].start||'') : (games[1].start||''); }
+        }
+      }
+    }
+    START_TIMES = times;
+    render();
+  } catch(e){ /* ignore, keep empty times */ }
+}
 async function loadExisting(){
   const email=document.getElementById('email').value.trim().toLowerCase();
-  const pin=document.getElementById('pin').value.trim();
   const status=document.getElementById('status');
   if(!email){ status.textContent='Enter email'; status.className='error'; return; }
-  if(pin.length!==4){ status.textContent='Enter 4-digit PIN'; status.className='error'; return; }
   status.textContent='Loading...'; status.className='';
   try { const r=await fetch('/api/picks/monday/get?email='+encodeURIComponent(email)); const j=await r.json(); if(j&&j.picks){ j.picks.forEach((v,i)=>{ const inp=document.querySelector(`input[data-idx='${i}']`); if(inp) inp.value=v; if(v){ const btn=document.querySelector(`button.mc[data-idx='${i}'][data-val='${v}']`); if(btn) btn.click(); } }); status.textContent='Loaded'; status.className='success'; } else { status.textContent='No existing picks'; } } catch(e){ status.textContent='Load failed'; status.className='error'; }
 }
@@ -135,6 +194,9 @@ document.getElementById('refreshStatus').addEventListener('click', loadStatus);
 async function loadEmails(){ try { const r=await fetch('/api/pins/emails?ts='+Date.now()); const j=await r.json(); if(j.ok){ const sel=document.getElementById('email'); j.emails.forEach(e=>{ const opt=document.createElement('option'); opt.value=e; opt.textContent=e; sel.appendChild(opt); }); } } catch(e){} }
 setInterval(loadStatus, 20000);
 setTimeout(loadStatus,400);
+// Kick off initial loads
+loadLabels();
+loadTimes();
 loadEmails();
 </script>
 </body>
