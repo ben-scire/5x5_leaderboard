@@ -1317,6 +1317,59 @@ def admin_saturday_score_debug():
         data.append({ 'email': email, 'raw': raw, 'norm': norm, 'score': score })
     return jsonify({ 'ok': True, 'count': len(data), 'resultsRaw': SATURDAY_RESULTS, 'resultsNorm': [_norm_team(r) for r in SATURDAY_RESULTS], 'entries': data })
 
+# ---- Admin: Push winners (results) for a given day ----
+@app.route('/api/admin/results/push', methods=['POST'])
+def admin_push_results():
+    """Admin: Update the finalized winners/results list for a day (Thu/Fri/Sat/Sun).
+    Body: { day: 'Fri'|'Sat'|'Sun'|'Thu', results: [..], token?: str }
+    - Length must match existing length for that day.
+    - Values normalized to upper-case strings; use null/None or '' to clear (set to None internally).
+    Returns before/after plus updated leaderboard snapshot so UI can refresh instantly.
+    """
+    token = request.args.get('token') or request.headers.get('X-Admin-Token')
+    admin_token = os.environ.get('ADMIN_TOKEN')
+    if admin_token and token != admin_token:
+        return jsonify({ 'ok': False, 'error': 'forbidden' }), 403
+    payload = request.get_json(force=True, silent=True) or {}
+    day = (payload.get('day') or '').strip().title()  # Thu/Fri/Sat/Sun
+    new_results = payload.get('results')
+    if day not in ('Thu','Fri','Sat','Sun'):
+        return jsonify({ 'ok': False, 'error': 'unsupported_day' }), 400
+    if not isinstance(new_results, list):
+        return jsonify({ 'ok': False, 'error': 'results_list_required' }), 400
+    # Map day -> (name, ref)
+    global RESULTS, FRIDAY_RESULTS, SATURDAY_RESULTS, SUNDAY_RESULTS
+    if day=='Thu':
+        before = RESULTS[:]
+        if len(new_results) != len(RESULTS):
+            return jsonify({ 'ok': False, 'error': 'length_mismatch', 'expected': len(RESULTS) }), 400
+        RESULTS = [ (None if (r is None or r=='') else str(r).strip().upper()) for r in new_results ]
+        after = RESULTS[:]
+    elif day=='Fri':
+        before = FRIDAY_RESULTS[:]
+        if len(new_results) != len(FRIDAY_RESULTS):
+            return jsonify({ 'ok': False, 'error': 'length_mismatch', 'expected': len(FRIDAY_RESULTS) }), 400
+        FRIDAY_RESULTS = [ (None if (r is None or r=='') else str(r).strip().upper()) for r in new_results ]
+        after = FRIDAY_RESULTS[:]
+    elif day=='Sat':
+        before = SATURDAY_RESULTS[:]
+        if len(new_results) != len(SATURDAY_RESULTS):
+            return jsonify({ 'ok': False, 'error': 'length_mismatch', 'expected': len(SATURDAY_RESULTS) }), 400
+        SATURDAY_RESULTS = [ (None if (r is None or r=='') else str(r).strip().upper()) for r in new_results ]
+        after = SATURDAY_RESULTS[:]
+    else:  # Sun
+        before = SUNDAY_RESULTS[:]
+        if len(new_results) != len(SUNDAY_RESULTS):
+            return jsonify({ 'ok': False, 'error': 'length_mismatch', 'expected': len(SUNDAY_RESULTS) }), 400
+        SUNDAY_RESULTS = [ (None if (r is None or r=='') else str(r).strip().upper()) for r in new_results ]
+        after = SUNDAY_RESULTS[:]
+    # Recompute leaderboard
+    try:
+        entries = compute_scores()
+    except Exception as e:
+        return jsonify({ 'ok': False, 'error': 'recompute_failed', 'detail': str(e) }), 500
+    return jsonify({ 'ok': True, 'day': day, 'before': before, 'after': after, 'changed': before!=after, 'entries': entries })
+
 @app.route('/api/admin/saturday/force_refill', methods=['POST'])
 def admin_saturday_force_refill():
     """Admin: Manually trigger repair + force-fill of first two Saturday games for target users.
