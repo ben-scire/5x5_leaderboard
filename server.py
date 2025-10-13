@@ -3,7 +3,7 @@
 from flask import Flask, jsonify, send_from_directory, request
 import time, os, json, pathlib
 
-VERSION = 'week-multi-23'  # Sunday: finalize KC as last winner (all Sunday games complete)
+VERSION = 'week-multi-24'  # Fix Sunday ordering: restore NE before LAR to match stored user picks
 # Always treat Saturday JSON snapshot as authoritative; ignore CSV log auto-rebuilds.
 FORCE_SATURDAY_JSON = True  # previously env-driven; now permanently enabled
 RUNTIME_FORCE_SATURDAY_JSON = True  # runtime flag also locked on so reload logic always prefers JSON
@@ -26,8 +26,8 @@ SUNDAY_RESULTS = [
     'NYJ',  # Game 0 DEN @ NYJ (final)
     'PIT',  # Game 1 CLE @ PIT (final)
     'MIA',  # Game 2 LAC @ MIA (final)
-    'LAR',  # Game 3 LAR @ BAL (final)
-    'NE',   # Game 4 NE @ NO (final)
+    'NE',   # Game 3 NE @ NO (final)  (restored original index 3)
+    'LAR',  # Game 4 LAR @ BAL (final) (restored original index 4)
     'SEA',  # Game 5 SEA @ JAX (final)
     'TB',   # Game 6 SF @ TB (final)
     'KC'    # Game 7 DET @ KC (final)
@@ -1437,8 +1437,8 @@ SUNDAY_LABELS = [
     'NFL: DEN -6.5 @ NYJ (pick team)',            # 9:30 AM ET early game
     'NFL: CLE +6.5 @ PIT (pick team)',            # 1:00 PM ET
     'NFL: LAC -3.5 @ MIA (pick team)',            # 1:00 PM ET
-    'NFL: LAR -7.5 @ BAL (pick team)',            # 1:00 PM ET (swapped order with NE game)
-    'NFL: NE -3.5 @ NO (pick team)',              # 1:00 PM ET (swapped)
+    'NFL: NE -3.5 @ NO (pick team)',              # 1:00 PM ET (restored original order)
+    'NFL: LAR -7.5 @ BAL (pick team)',            # 1:00 PM ET (restored)
     'NFL: SEA -1.5 @ JAX (pick team)',            # 1:00 PM ET
     'NFL: SF +3.5 @ TB (pick team)',              # 4:25 PM ET
     'NFL: DET +2.5 @ KC (pick team)'              # 8:20 PM ET
@@ -1449,8 +1449,8 @@ SUNDAY_SCHEDULE = [
     { 'sport':'NFL', 'eventId': None, 'away':'Denver Broncos', 'awayAbbr':'DEN', 'home':'New York Jets', 'homeAbbr':'NYJ', 'lineHome': +6.5, 'total': None, 'start':'2025-10-12T13:30:00Z' },
     { 'sport':'NFL', 'eventId': None, 'away':'Cleveland Browns', 'awayAbbr':'CLE', 'home':'Pittsburgh Steelers', 'homeAbbr':'PIT', 'lineHome': -6.5, 'total': None, 'start':'2025-10-12T17:00:00Z' },
     { 'sport':'NFL', 'eventId': None, 'away':'Los Angeles Chargers', 'awayAbbr':'LAC', 'home':'Miami Dolphins', 'homeAbbr':'MIA', 'lineHome': +3.5, 'total': None, 'start':'2025-10-12T17:00:00Z' },
-    { 'sport':'NFL', 'eventId': None, 'away':'Los Angeles Rams', 'awayAbbr':'LAR', 'home':'Baltimore Ravens', 'homeAbbr':'BAL', 'lineHome': -7.5, 'total': None, 'start':'2025-10-12T17:00:00Z' },
     { 'sport':'NFL', 'eventId': None, 'away':'New England Patriots', 'awayAbbr':'NE', 'home':'New Orleans Saints', 'homeAbbr':'NO', 'lineHome': +3.5, 'total': None, 'start':'2025-10-12T17:00:00Z' },
+    { 'sport':'NFL', 'eventId': None, 'away':'Los Angeles Rams', 'awayAbbr':'LAR', 'home':'Baltimore Ravens', 'homeAbbr':'BAL', 'lineHome': -7.5, 'total': None, 'start':'2025-10-12T17:00:00Z' },
     { 'sport':'NFL', 'eventId': None, 'away':'Seattle Seahawks', 'awayAbbr':'SEA', 'home':'Jacksonville Jaguars', 'homeAbbr':'JAX', 'lineHome': +1.5, 'total': None, 'start':'2025-10-12T17:00:00Z' },
     { 'sport':'NFL', 'eventId': None, 'away':'San Francisco 49ers', 'awayAbbr':'SF', 'home':'Tampa Bay Buccaneers', 'homeAbbr':'TB', 'lineHome': -3.5, 'total': None, 'start':'2025-10-12T20:25:00Z' },
     { 'sport':'NFL', 'eventId': None, 'away':'Detroit Lions', 'awayAbbr':'DET', 'home':'Kansas City Chiefs', 'homeAbbr':'KC', 'lineHome': -2.5, 'total': None, 'start':'2025-10-13T00:20:00Z' }
