@@ -478,14 +478,20 @@ try {
 } catch(_e){ console.warn('[Sat Finals] apply failed', _e); }
 
 // Sunday: enforce hard-coded finalized winners (disable any live/dynamic Sunday mutation)
+// IMPORTANT: Order must match server SUNDAY_RESULTS exactly to ensure scoring alignment.
+// Server (week-multi-24) order: NYJ, PIT, MIA, NE, LAR, SEA, TB, KC
 try {
-  const sunFinals = ['NYJ','PIT','MIA','LAR','NE','SEA','TB','KC'];
+  let sunFinals = ['NYJ','PIT','MIA','NE','LAR','SEA','TB','KC'];
+  // If an earlier cached hard-code used the old swapped order (LAR,NE), detect & correct.
+  if(Array.isArray(coveredPicks['Sun']) && coveredPicks['Sun'][3]==='LAR' && coveredPicks['Sun'][4]==='NE'){
+    console.log('[Sun Finals] Detected legacy swapped order (LAR/NE) – correcting to NE/LAR');
+  }
   if(!Array.isArray(coveredPicks['Sun'])) coveredPicks['Sun'] = Array(sunFinals.length).fill(null);
   sunFinals.forEach((f,i)=>{ coveredPicks['Sun'][i] = f; });
   recalcPoints('Sun');
   recalcTotal();
   updateLeaderboard();
-  console.log('[Sun Finals] Applied authoritative finals', sunFinals);
+  console.log('[Sun Finals] Applied authoritative finals (server-aligned)', sunFinals);
 } catch(e){ console.warn('[Sun Finals] apply failed', e); }
 
 // Hard normalization pass: upgrade any raw user pick spelled exactly 'OHIO ST' to 'OHIO STATE'
