@@ -1,4 +1,5 @@
 # ------------------ Monday (new) ------------------
+import pathlib
 MONDAY_LABELS = [
     'NFL: BUF -3.5 @ ATL (Spread)',
     'NFL: BUF -3.5 @ ATL (Total O/U 49.5)',
