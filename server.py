@@ -128,9 +128,11 @@ def admin_sunday_override_user():
     _refresh_all_users()
     return jsonify({ 'ok': True, 'email': email, 'before': before, 'after': adj })
 """Ultra-minimal Thursday-only leaderboard server (fully cleaned version)."""
+
 """Ultra-minimal Thursday-only leaderboard server (fully cleaned version)."""
+import time, os, json
+import pathlib
 from flask import Flask, jsonify, send_from_directory, request
-import time, os, json, pathlib
 
 VERSION = 'week-multi-24'  # Fix Sunday ordering: restore NE before LAR to match stored user picks
 # Always treat Saturday JSON snapshot as authoritative; ignore CSV log auto-rebuilds.
