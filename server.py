@@ -3,7 +3,7 @@
 from flask import Flask, jsonify, send_from_directory, request
 import time, os, json, pathlib
 
-VERSION = 'week-multi-18'  # Sunday: set first 7 winners + auto NYJ backfill for missing Game 0 picks
+VERSION = 'week-multi-20'  # Fix: restore SATURDAY_RESULTS constant & confirm Sunday winners
 # Always treat Saturday JSON snapshot as authoritative; ignore CSV log auto-rebuilds.
 FORCE_SATURDAY_JSON = True  # previously env-driven; now permanently enabled
 RUNTIME_FORCE_SATURDAY_JSON = True  # runtime flag also locked on so reload logic always prefers JSON
@@ -12,26 +12,24 @@ RUNTIME_FORCE_SATURDAY_JSON = True  # runtime flag also locked on so reload logi
 RESULTS = ['NYG', 'OVER', 'YES']  # Thursday: spread winner, total, prop
 # Friday final winners (spread picks): index aligned with FRIDAY_LABELS
 FRIDAY_RESULTS = ['USF', 'WASH']
-# Saturday results placeholder (filled when games final). Length = 6 games
+# Saturday final results (6 games, canonical full names)
 SATURDAY_RESULTS = [
-    'OHIO STATE',   # Game 1 final (Ohio State covers -15.5)
-    'MISSOURI',     # Game 2 final (Missouri covers +3.5 vs Alabama)
-    'INDIANA',      # Game 3 final (Indiana (+7.5) covers; replaces prior OREGON)
-    'TEXAS',        # Game 4 final (Texas covers -2.5)
-    'GEORGIA',      # Game 5 final (Georgia covers -4.5)
-    'BYU'           # Game 6 final (BYU covers -2.5)
+    'OHIO STATE',
+    'MISSOURI',
+    'INDIANA',
+    'TEXAS',
+    'GEORGIA',
+    'BYU'
 ]
-# Sunday results (8 games) – first 7 finals entered, last game still pending.
-# Order aligns with SUNDAY_LABELS defined later in the file.
-# Winners provided by user: NYJ, PIT, MIA, LAR, NE, SEA, TB; last game open.
+# Sunday results: include all finalized winners; last game still pending.
 SUNDAY_RESULTS = [
-    'NYJ',  # Game 0 DEN @ NYJ
-    'PIT',  # Game 1 CLE @ PIT
-    'MIA',  # Game 2 LAC @ MIA
-    'NE',   # Game 3 NE @ NO
-    'LAR',  # Game 4 LAR @ BAL
-    'SEA',  # Game 5 SEA @ JAX
-    'TB',   # Game 6 SF @ TB
+    'NYJ',  # Game 0 DEN @ NYJ (final)
+    'PIT',  # Game 1 CLE @ PIT (final)
+    'MIA',  # Game 2 LAC @ MIA (final)
+    'NE',   # Game 3 NE @ NO (final)
+    'LAR',  # Game 4 LAR @ BAL (final)
+    'SEA',  # Game 5 SEA @ JAX (final)
+    'TB',   # Game 6 SF @ TB (final)
     None    # Game 7 DET @ KC (pending)
 ]
 
