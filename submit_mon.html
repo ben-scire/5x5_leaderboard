@@ -40,15 +40,7 @@ button.mc.selected::after{content:'\2713';position:absolute;top:-6px;right:-6px;
   <div class="row" style="margin-top:18px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
   <button id="loadBtn" type="button" disabled>Load Existing</button>
   <button id="saveBtn" type="button" disabled>Save Picks</button>
-// Enable/disable buttons based on email selection
-const emailSelect = document.getElementById('email');
-const loadBtn = document.getElementById('loadBtn');
-const saveBtn = document.getElementById('saveBtn');
-emailSelect.addEventListener('change', function() {
-  const hasEmail = emailSelect.value && emailSelect.value.trim() !== '';
-  loadBtn.disabled = !hasEmail;
-  saveBtn.disabled = !hasEmail;
-});
+  <span id="status"></span>
     <span id="status"></span>
   </div>
   <div class="note">Games lock individually at kickoff. Locked games display a red badge and cannot be changed.</div>
@@ -59,6 +51,22 @@ emailSelect.addEventListener('change', function() {
 </div>
 <p style="margin-top:28px;"><a href="leaderboard.html" style="color:#64b5f6;">Back to Leaderboard</a></p>
 <script>
+// Enable/disable Save/Load buttons based on email selection (mimic Sunday logic)
+const emailSelect = document.getElementById('email');
+const loadBtn = document.getElementById('loadBtn');
+const saveBtn = document.getElementById('saveBtn');
+emailSelect.addEventListener('change', function() {
+  const hasEmail = emailSelect.value && emailSelect.value.trim() !== '';
+  loadBtn.disabled = !hasEmail;
+  saveBtn.disabled = !hasEmail;
+});
+// When emails are loaded, if a value is already selected, trigger change
+setTimeout(()=>{
+  if(emailSelect.value && emailSelect.value.trim() !== '') {
+    const event = new Event('change');
+    emailSelect.dispatchEvent(event);
+  }
+}, 500);
 const LABELS = [
   'NFL: BUF -3.5 @ ATL (Spread)',
   'NFL: BUF -3.5 @ ATL (Total O/U 49.5)',
