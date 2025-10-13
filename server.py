@@ -3,7 +3,7 @@
 from flask import Flask, jsonify, send_from_directory, request
 import time, os, json, pathlib
 
-VERSION = 'week-multi-17'  # add admin force refill endpoint for Saturday first two games
+VERSION = 'week-multi-18'  # Sunday: set first 7 winners + auto NYJ backfill for missing Game 0 picks
 # Always treat Saturday JSON snapshot as authoritative; ignore CSV log auto-rebuilds.
 FORCE_SATURDAY_JSON = True  # previously env-driven; now permanently enabled
 RUNTIME_FORCE_SATURDAY_JSON = True  # runtime flag also locked on so reload logic always prefers JSON
@@ -21,8 +21,19 @@ SATURDAY_RESULTS = [
     'GEORGIA',      # Game 5 final (Georgia covers -4.5)
     'BYU'           # Game 6 final (BYU covers -2.5)
 ]
-# Sunday results placeholder (8 games)
-SUNDAY_RESULTS = [None]*8
+# Sunday results (8 games) – first 7 finals entered, last game still pending.
+# Order aligns with SUNDAY_LABELS defined later in the file.
+# Winners provided by user: NYJ, PIT, MIA, LAR, NE, SEA, TB; last game open.
+SUNDAY_RESULTS = [
+    'NYJ',  # Game 0 DEN @ NYJ
+    'PIT',  # Game 1 CLE @ PIT
+    'MIA',  # Game 2 LAC @ MIA
+    'NE',   # Game 3 NE @ NO
+    'LAR',  # Game 4 LAR @ BAL
+    'SEA',  # Game 5 SEA @ JAX
+    'TB',   # Game 6 SF @ TB
+    None    # Game 7 DET @ KC (pending)
+]
 
 # Authoritative Thursday picks now fully external in data/picks/thursday_picks.json (no embedded fallback)
 DATA_OVERRIDE_PATH = pathlib.Path('data/picks/thursday_picks.json')
@@ -917,6 +928,10 @@ def compute_scores():
     """Return sorted list of scoreboard entries for all users (Thu + Fri + Sat + Sun) with normalization."""
     _maybe_reload_saturday()  # refresh Saturday picks if JSON snapshot changed
     _repair_saturday_from_file()  # merge any non-blank picks that are missing in-memory
+    # Ensure Sunday picks reloaded & game0 NYJ backfill applied before scoring
+    if 'SUNDAY_PICKS' in globals():
+        _maybe_reload_sunday()
+        _sunday_backfill_game0_nyj()
     entries = []
     for email in ALL_USERS:
         thu_picks = HARD_PICKS[email]
@@ -1037,7 +1052,7 @@ def api_picks_public():
         })
     if day.startswith('sun'):
         now = int(time.time()*1000)
-        _maybe_reload_sunday()
+        _maybe_reload_sunday(); _sunday_backfill_game0_nyj()
         return jsonify({
             'ok': True,
             'entries': { email: { 'picks': picks, 'ts': now } for email, picks in SUNDAY_PICKS.items() }
@@ -1065,7 +1080,7 @@ def picks_status_generic(day_key):
         missing = [u for u in ALL_USERS if u not in SATURDAY_PICKS]
         return jsonify({ 'ok': True, 'day': 'Sat', 'submitted': submitted, 'missing': missing, 'submittedCount': len(submitted), 'missingCount': len(missing) })
     if dk.startswith('sun'):
-        _maybe_reload_sunday()
+        _maybe_reload_sunday(); _sunday_backfill_game0_nyj()
         submitted = sorted(SUNDAY_PICKS.keys())
         missing = [u for u in ALL_USERS if u not in SUNDAY_PICKS]
         return jsonify({ 'ok': True, 'day': 'Sun', 'submitted': submitted, 'missing': missing, 'submittedCount': len(submitted), 'missingCount': len(missing) })
@@ -1451,6 +1466,30 @@ def _parse_iso_utc_sun(ts: str):
 
 SUNDAY_PICKS = _load_sunday()
 
+# --- Sunday backfill: auto-fill Game 0 (DEN @ NYJ) with NYJ if blank so everyone gets a baseline pick
+def _sunday_backfill_game0_nyj():
+    try:
+        changed = False
+        for email, sat in SATURDAY_PICKS.items():  # iterate known active participants
+            picks = SUNDAY_PICKS.get(email)
+            if not isinstance(picks, list):
+                picks = ['']*len(SUNDAY_LABELS)
+                SUNDAY_PICKS[email] = picks
+                changed = True
+            if len(picks) < len(SUNDAY_LABELS):
+                picks.extend(['']*(len(SUNDAY_LABELS)-len(picks)))
+                changed = True
+            # Only backfill if truly blank
+            if not picks[0]:
+                picks[0] = 'NYJ'
+                changed = True
+        if changed:
+            _save_sunday(SUNDAY_PICKS)
+            _refresh_all_users()
+        return changed
+    except Exception:
+        return False
+
 # --- Hot reload support (mtime-based) for Sunday picks ---
 _SUNDAY_FILE_MTIME = SUNDAY_FILE.stat().st_mtime if SUNDAY_FILE.exists() else None
 
@@ -1556,7 +1595,7 @@ def sunday_submit():
 
 @app.route('/api/picks/sunday/status')
 def sunday_status():
-    _maybe_reload_sunday()
+    _maybe_reload_sunday(); _sunday_backfill_game0_nyj()
     _refresh_all_users()
     submitted = sorted(SUNDAY_PICKS.keys())
     missing = [u for u in ALL_USERS if u not in SUNDAY_PICKS]
@@ -1564,7 +1603,7 @@ def sunday_status():
 
 @app.route('/api/picks/sunday/all')
 def sunday_all():
-    _maybe_reload_sunday()
+    _maybe_reload_sunday(); _sunday_backfill_game0_nyj()
     counts = [ {} for _ in range(len(SUNDAY_LABELS)) ]
     for email, picks in SUNDAY_PICKS.items():
         for i,val in enumerate(picks):
