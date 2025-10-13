@@ -18,6 +18,7 @@ MONDAY_LABELS = [
 ]
 MONDAY_FILE = pathlib.Path('data/picks/monday_picks.json')
 MONDAY_LOCK_FILE = pathlib.Path('data/picks/monday_locked.json')
+MONDAY_CSV_LOG = pathlib.Path('data/picks/monday_picks_log.csv')
 def _load_monday():
     if MONDAY_FILE.exists():
         try:
@@ -47,6 +48,21 @@ MONDAY_PICKS = _load_monday()
 def _refresh_monday():
     global MONDAY_PICKS
     MONDAY_PICKS = _load_monday()
+
+def _append_monday_csv(email: str, picks: list):
+    """Append a single submission row to the Monday CSV log (best-effort)."""
+    try:
+        MONDAY_CSV_LOG.parent.mkdir(parents=True, exist_ok=True)
+        is_new = not MONDAY_CSV_LOG.exists()
+        with MONDAY_CSV_LOG.open('a', encoding='utf-8') as f:
+            if is_new:
+                f.write('ts_iso,email,' + ','.join([f'pick{i+1}' for i in range(len(MONDAY_LABELS))]) + '\n')
+            ts = time.strftime('%Y-%m-%dT%H:%M:%S', time.gmtime())
+            row = [ts, email] + picks
+            safe = [str(c).replace('\n',' ').replace('\r',' ').replace(',', ' ') for c in row]
+            f.write(','.join(safe) + '\n')
+    except Exception:
+        pass
 
 # Monday labels endpoint
 @app.route('/api/picks/monday/labels')
@@ -89,6 +105,7 @@ def monday_submit():
     if not _save_monday(MONDAY_PICKS):
         return jsonify({ 'ok': False, 'error': 'persist_failed' }), 500
     _refresh_monday()
+    _append_monday_csv(email, updated)
     return jsonify({ 'ok': True, 'saved': True })
 
 # Monday status endpoint
@@ -110,6 +127,116 @@ def monday_status():
     submitted = [e for e in emails if e in MONDAY_PICKS and any(MONDAY_PICKS[e])]
     missing = [e for e in emails if e not in MONDAY_PICKS or not any(MONDAY_PICKS[e])]
     return jsonify({ 'ok': True, 'submitted': submitted, 'missing': missing })
+
+# Monday CSV log endpoints (mirror Friday/Sunday style)
+@app.route('/api/picks/monday/log')
+def monday_log():
+    if not MONDAY_CSV_LOG.exists():
+        return jsonify({ 'ok': True, 'empty': True, 'message': 'no_log' })
+    try:
+        with MONDAY_CSV_LOG.open('r', encoding='utf-8') as f:
+            content = f.read()
+        return app.response_class(content, mimetype='text/csv')
+    except Exception as e:
+        return jsonify({ 'ok': False, 'error': 'log_read_failed', 'detail': str(e) }), 500
+
+@app.route('/api/picks/monday/log/info')
+def monday_log_info():
+    if not MONDAY_CSV_LOG.exists():
+        return jsonify({ 'ok': True, 'exists': False })
+    try:
+        stat = MONDAY_CSV_LOG.stat()
+        size = stat.st_size
+        mtime = time.strftime('%Y-%m-%dT%H:%M:%S', time.gmtime(stat.st_mtime))
+        with MONDAY_CSV_LOG.open('r', encoding='utf-8') as f:
+            lines = f.read().strip().splitlines()
+        rows = max(0, len(lines) - 1) if lines else 0
+        return jsonify({ 'ok': True, 'exists': True, 'sizeBytes': size, 'modified': mtime, 'rowCount': rows })
+    except Exception as e:
+        return jsonify({ 'ok': False, 'error': 'log_info_failed', 'detail': str(e) }), 500
+
+@app.route('/api/picks/monday/log/latest')
+def monday_log_latest():
+    limit = int(request.args.get('n', '50'))
+    if limit < 1: limit = 1
+    if limit > 500: limit = 500
+    if not MONDAY_CSV_LOG.exists():
+        return jsonify({ 'ok': True, 'rows': [] })
+    try:
+        with MONDAY_CSV_LOG.open('r', encoding='utf-8') as f:
+            lines = f.read().strip().splitlines()
+        if not lines:
+            return jsonify({ 'ok': True, 'rows': [] })
+        header = lines[0].split(',')
+        cols = header
+        rows = []
+        for line in lines[-limit-1:]:
+            if not line or line==lines[0]: continue
+            parts = line.split(',')
+            if len(parts) < 2: continue
+            rows.append(dict(zip(cols, parts)))
+        return jsonify({ 'ok': True, 'rows': rows })
+    except Exception as e:
+        return jsonify({ 'ok': False, 'error': 'log_latest_failed', 'detail': str(e) }), 500
+
+def _latest_from_csv_log(log_path: pathlib.Path, expected_picks: int):
+    """Return dict email -> { 'picks': [...], 'ts': ts_iso } using the last row per email."""
+    if not log_path.exists():
+        return {}
+    latest = {}
+    try:
+        with log_path.open('r', encoding='utf-8') as f:
+            lines = f.read().strip().splitlines()
+        if not lines:
+            return {}
+        for line in lines[1:]:  # skip header
+            parts = line.split(',')
+            if len(parts) < 2: continue
+            ts, email = parts[0], parts[1].strip().lower()
+            picks = parts[2:2+expected_picks]
+            # normalize and pad
+            picks = [str(p or '').strip().upper() for p in picks]
+            while len(picks) < expected_picks: picks.append('')
+            latest[email] = { 'picks': picks, 'ts': ts }
+    except Exception:
+        return {}
+    return latest
+
+@app.route('/api/picks/submissions')
+def submissions_latest():
+    """Return latest submissions with timestamps for a given day (Thu, Fri, Sat, Sun, Mon). Query: ?day=Mon."""
+    day = (request.args.get('day') or '').strip().lower()
+    if not day:
+        return jsonify({ 'ok': False, 'error': 'day_required' }), 400
+    resp = { 'ok': True, 'day': day.capitalize(), 'entries': [] }
+    if day.startswith('fri'):
+        data = _latest_from_csv_log(FRIDAY_CSV_LOG, len(FRIDAY_LABELS))
+        # Fallback to in-memory picks without ts
+        if not data:
+            data = { e: { 'picks': FRIDAY_PICKS.get(e, []), 'ts': None } for e in FRIDAY_PICKS.keys() }
+        resp['entries'] = [ { 'email': e, **rec } for e, rec in sorted(data.items()) ]
+        return jsonify(resp)
+    if day.startswith('sun'):
+        data = _latest_from_csv_log(SUNDAY_CSV_LOG, len(SUNDAY_LABELS)) if 'SUNDAY_LABELS' in globals() else {}
+        if not data:
+            data = { e: { 'picks': SUNDAY_PICKS.get(e, []), 'ts': None } for e in SUNDAY_PICKS.keys() }
+        resp['entries'] = [ { 'email': e, **rec } for e, rec in sorted(data.items()) ]
+        return jsonify(resp)
+    if day.startswith('mon'):
+        data = _latest_from_csv_log(MONDAY_CSV_LOG, len(MONDAY_LABELS))
+        if not data:
+            data = { e: { 'picks': MONDAY_PICKS.get(e, []), 'ts': None } for e in MONDAY_PICKS.keys() }
+        resp['entries'] = [ { 'email': e, **rec } for e, rec in sorted(data.items()) ]
+        return jsonify(resp)
+    if day.startswith('thu'):
+        # No timestamps stored for Thursday; return authoritative picks
+        resp['entries'] = [ { 'email': e, 'picks': HARD_PICKS[e], 'ts': None } for e in sorted(HARD_PICKS.keys()) ]
+        return jsonify(resp)
+    if day.startswith('sat'):
+        # Saturday logging is disabled; return JSON snapshot without ts
+        resp['entries'] = [ { 'email': e, 'picks': SATURDAY_PICKS.get(e, []), 'ts': None } for e in sorted(SATURDAY_PICKS.keys()) ]
+        return jsonify(resp)
+    return jsonify({ 'ok': False, 'error': 'unsupported_day' }), 400
 
 
 
