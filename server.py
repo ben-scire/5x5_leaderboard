@@ -5,7 +5,7 @@ MONDAY_LABELS = [
     'NFL: BUF -3.5 @ ATL (Prop: Bijan Robinson AND James Cook 60+ rushing yards EACH)',
     'NFL: CHI +5.5 @ WSH (Spread)',
     'NFL: CHI +5.5 @ WSH (Total O/U 48.5)',
-    'NFL: CHI +5.5 @ WSH (Prop: Jayden Daniels 40+ AND Caleb Williams 20+ rushing yards)'
+    'NFL: CHI +5.5 @ WSH (Prop: Jayden Daniels OR Caleb Williams Anytime rush/rec TD)'
 ]
 MONDAY_FILE = pathlib.Path('data/picks/monday_picks.json')
 MONDAY_LOCK_FILE = pathlib.Path('data/picks/monday_locked.json')
