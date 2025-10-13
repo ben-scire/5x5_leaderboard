@@ -35,7 +35,7 @@ button.mc.selected::after{content:'\2713';position:absolute;top:-6px;right:-6px;
       <option value="">Select your email</option>
     </select>
   </label></div>
-  <!-- PIN field removed for Monday submission -->
+  <div class="row" style="max-width:200px;"><label>PIN <input id="pin" type="text" inputmode="numeric" pattern="\\d{4}" maxlength="4" placeholder="4-digit PIN" style="letter-spacing:2px;text-align:center;" /></label></div>
   <div id="matchups" class="grid"></div>
   <div class="row" style="margin-top:18px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
   <button id="loadBtn" type="button" disabled>Load Existing</button>
@@ -51,22 +51,20 @@ button.mc.selected::after{content:'\2713';position:absolute;top:-6px;right:-6px;
 </div>
 <p style="margin-top:28px;"><a href="leaderboard.html" style="color:#64b5f6;">Back to Leaderboard</a></p>
 <script>
-// Enable/disable Save/Load buttons based on email selection (mimic Sunday logic)
+// Enable/disable Save/Load buttons based on email and PIN (mimic Sunday logic)
 const emailSelect = document.getElementById('email');
+const pinInput = document.getElementById('pin');
 const loadBtn = document.getElementById('loadBtn');
 const saveBtn = document.getElementById('saveBtn');
-emailSelect.addEventListener('change', function() {
+function updateButtonState() {
   const hasEmail = emailSelect.value && emailSelect.value.trim() !== '';
-  loadBtn.disabled = !hasEmail;
-  saveBtn.disabled = !hasEmail;
-});
-// When emails are loaded, if a value is already selected, trigger change
-setTimeout(()=>{
-  if(emailSelect.value && emailSelect.value.trim() !== '') {
-    const event = new Event('change');
-    emailSelect.dispatchEvent(event);
-  }
-}, 500);
+  const hasPin = pinInput.value && pinInput.value.trim().length === 4;
+  loadBtn.disabled = !hasEmail || !hasPin;
+  saveBtn.disabled = !hasEmail || !hasPin;
+}
+emailSelect.addEventListener('change', updateButtonState);
+pinInput.addEventListener('input', updateButtonState);
+setTimeout(updateButtonState, 500);
 const LABELS = [
   'NFL: BUF -3.5 @ ATL (Spread)',
   'NFL: BUF -3.5 @ ATL (Total O/U 49.5)',
@@ -100,14 +98,20 @@ function render(){
 }
 render();
 async function loadExisting(){
-  const email=document.getElementById('email').value.trim().toLowerCase(); const status=document.getElementById('status');
+  const email=document.getElementById('email').value.trim().toLowerCase();
+  const pin=document.getElementById('pin').value.trim();
+  const status=document.getElementById('status');
   if(!email){ status.textContent='Enter email'; status.className='error'; return; }
+  if(pin.length!==4){ status.textContent='Enter 4-digit PIN'; status.className='error'; return; }
   status.textContent='Loading...'; status.className='';
   try { const r=await fetch('/api/picks/monday/get?email='+encodeURIComponent(email)); const j=await r.json(); if(j&&j.picks){ j.picks.forEach((v,i)=>{ const inp=document.querySelector(`input[data-idx='${i}']`); if(inp) inp.value=v; if(v){ const btn=document.querySelector(`button.mc[data-idx='${i}'][data-val='${v}']`); if(btn) btn.click(); } }); status.textContent='Loaded'; status.className='success'; } else { status.textContent='No existing picks'; } } catch(e){ status.textContent='Load failed'; status.className='error'; }
 }
 async function savePicks(){
-  const email=document.getElementById('email').value.trim().toLowerCase(); const status=document.getElementById('status');
+  const email=document.getElementById('email').value.trim().toLowerCase();
+  const pin=document.getElementById('pin').value.trim();
+  const status=document.getElementById('status');
   if(!email){ status.textContent='Enter email'; status.className='error'; return; }
+  if(pin.length!==4){ status.textContent='Enter 4-digit PIN'; status.className='error'; return; }
   const inputs=Array.from(document.querySelectorAll('input[data-idx]'));
   const picks=inputs.map(inp=> (inp.value||'').trim().toUpperCase());
   status.textContent='Saving...'; status.className='';
@@ -115,7 +119,7 @@ async function savePicks(){
     const r=await fetch('/api/picks/monday/submit',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({ email, picks })
+      body:JSON.stringify({ email, pin, picks })
     });
     const j=await r.json();
     if(!r.ok||!j.ok){ status.textContent=j.error||'Save failed'; status.className='error'; return;}

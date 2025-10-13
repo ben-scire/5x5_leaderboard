@@ -61,27 +61,35 @@ def monday_get():
     picks = MONDAY_PICKS.get(email)
     return jsonify({ 'ok': True, 'email': email, 'picks': picks })
 
-# Monday submit picks for user
+
+# Monday submit picks for user (mimic Sunday logic exactly)
 @app.route('/api/picks/monday/submit', methods=['POST'])
 def monday_submit():
     payload = request.get_json(force=True, silent=True) or {}
     email = (payload.get('email') or '').strip().lower()
-    picks = payload.get('picks')
+    picks = payload.get('picks') or []
+    pin = str(payload.get('pin') or '').strip()
     if not email:
         return jsonify({ 'ok': False, 'error': 'email_required' }), 400
+    if email not in ALLOWED_EMAILS:
+        return jsonify({ 'ok': False, 'error': 'unauthorized_email' }), 403
+    if not _check_pin(email, pin):
+        return jsonify({ 'ok': False, 'error': 'invalid_pin' }), 403
     if not isinstance(picks, list):
-        return jsonify({ 'ok': False, 'error': 'picks_list_required' }), 400
-    adj = [str(p or '').strip().upper() for p in picks]
-    if len(adj) > len(MONDAY_LABELS):
-        adj = adj[:len(MONDAY_LABELS)]
-    if len(adj) < len(MONDAY_LABELS):
-        adj += [''] * (len(MONDAY_LABELS) - len(adj))
-    before = MONDAY_PICKS.get(email, [''] * len(MONDAY_LABELS))[:]
-    MONDAY_PICKS[email] = adj
+        return jsonify({ 'ok': False, 'error': 'invalid_picks_type' }), 400
+    # Allow partial submissions; pad/truncate
+    if len(picks) > len(MONDAY_LABELS): picks = picks[:len(MONDAY_LABELS)]
+    if len(picks) < len(MONDAY_LABELS): picks = picks + ['']*(len(MONDAY_LABELS)-len(picks))
+    existing = MONDAY_PICKS.get(email, ['']*len(MONDAY_LABELS))
+    updated=[]
+    for idx,val in enumerate(picks):
+        # If you want per-game locking for Monday, add logic here (currently not implemented)
+        updated.append(str(val or '').strip().upper())
+    MONDAY_PICKS[email] = updated
     if not _save_monday(MONDAY_PICKS):
         return jsonify({ 'ok': False, 'error': 'persist_failed' }), 500
     _refresh_monday()
-    return jsonify({ 'ok': True, 'email': email, 'before': before, 'after': adj })
+    return jsonify({ 'ok': True, 'saved': True })
 
 # Monday status endpoint
 @app.route('/api/picks/monday/status')
