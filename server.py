@@ -318,32 +318,6 @@ TOTAL_POSSIBLE = len(RESULTS) + len(FRIDAY_RESULTS) + len(SATURDAY_RESULTS) + le
 
 app = Flask(__name__, static_folder='.', static_url_path='')
 
-# --- Public: list allowed emails for dropdowns ---
-@app.route('/api/pins/emails')
-def api_pins_emails():
-    emails = []
-    # Prefer runtime-configured list if present
-    try:
-        from flask import current_app
-        cfg = current_app.config.get('ALLOWED_EMAILS')
-        if isinstance(cfg, (list, tuple)):
-            emails = [str(e).strip().lower() for e in cfg if isinstance(e, str) and '@' in e]
-    except Exception:
-        pass
-    if not emails:
-        try:
-            emails = list(ALLOWED_EMAILS)
-        except Exception:
-            emails = []
-    if not emails:
-        try:
-            emails = list(PIN_MAP.keys())
-        except Exception:
-            emails = []
-    # sanitize and sort
-    emails = sorted({ e.strip().lower() for e in emails if isinstance(e,str) and '@' in e })
-    return jsonify({ 'ok': True, 'emails': emails })
-
 # --- Cache control: prevent stale HTML on mobile Safari / iOS ---
 # Strategy:
 # 1. All HTML responses get no-store headers so updates are always fetched.
