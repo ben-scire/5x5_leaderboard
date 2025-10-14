@@ -271,8 +271,11 @@ def monday_recover_endpoint():
 
 @app.route('/api/picks/monday/export')
 def monday_export_endpoint():
+    include_blanks = (request.args.get('includeBlanks') in ('1','true','yes'))
     entries = []
     for email, picks in sorted(MONDAY_PICKS.items()):
+        if (not include_blanks) and (not any(picks)):
+            continue
         entries.append({ 'email': email, 'picks': picks, 'ts_iso': MONDAY_TS_MAP.get(email, '') })
     return jsonify({ 'ok': True, 'count': len(entries), 'entries': entries })
 
@@ -287,7 +290,10 @@ def api_picks_submissions():
             _refresh_monday()
         except Exception:
             pass
-        out = { e: { 'picks': p, 'ts_iso': MONDAY_TS_MAP.get(e, '') } for e,p in MONDAY_PICKS.items() }
+        include_blanks = (request.args.get('includeBlanks') in ('1','true','yes'))
+        out = { e: { 'picks': p, 'ts_iso': MONDAY_TS_MAP.get(e, '') }
+                for e,p in MONDAY_PICKS.items()
+                if include_blanks or any(p) }
         return jsonify({ 'ok': True, 'day': 'Mon', 'entries': out })
     return jsonify({ 'ok': True, 'day': day, 'entries': {} })
 
