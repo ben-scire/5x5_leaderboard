@@ -90,8 +90,15 @@ def _recover_monday_from_files():
     rec = {}
     tsmap = {}
     alt_json_paths = [
+        # Node legacy under data/
+        pathlib.Path('data/mondayPicks.json'),
+        pathlib.Path('data/monday_picks.json'),
+        pathlib.Path('data/MondayPicks.json'),
+        # Node legacy under data/picks/
         pathlib.Path('data/picks/mondayPicks.json'),
+        pathlib.Path('data/picks/monday_picks.json'),
         pathlib.Path('data/picks/MondayPicks.json'),
+        # Recovered files in repo
         pathlib.Path('recovered/mondayPicks.json'),
         pathlib.Path('recovered/monday_picks.json')
     ]
@@ -106,8 +113,15 @@ def _recover_monday_from_files():
         except Exception:
             continue
     alt_logs = [
+        # Current canonical
         MONDAY_LOG_FILE,
+        # Node legacy under data/
+        pathlib.Path('data/monday_picks_log.csv'),
+        pathlib.Path('data/mondayPicks_log.csv'),
+        # Node legacy under data/picks/
+        pathlib.Path('data/picks/monday_picks_log.csv'),
         pathlib.Path('data/picks/mondayPicks_log.csv'),
+        # Recovered in repo
         pathlib.Path('recovered/monday_picks_log.csv'),
         pathlib.Path('recovered/mondayPicks_log.csv')
     ]
