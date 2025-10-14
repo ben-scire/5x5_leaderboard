@@ -34,13 +34,10 @@
       if(!window.userPicks) window.userPicks = { Mon: {} };
       if(!window.userPicks['Mon']) window.userPicks['Mon'] = {};
       const labels = (window.picksLabels && window.picksLabels['Mon']) || [];
-      let targetLen = labels.length || 0;
       Object.keys(pubEntries).forEach(email => {
         const rec = pubEntries[email] || {};
         const raw = Array.isArray(rec.picks) ? rec.picks : [];
-        let needed = targetLen || raw.length || 6;
-        if(needed < raw.length) needed = raw.length;
-        if(needed > targetLen) targetLen = needed;
+        const needed = labels.length || raw.length;
         const adj = raw.slice(0, needed);
         while(adj.length < needed) adj.push('');
         window.userPicks['Mon'][email] = adj;
@@ -48,34 +45,6 @@
           window.users.push({ username: email, thurs:0, fri:0, sat:0, sun:0, mon:0, total:0 });
         }
       });
-      const fillLen = targetLen || 6;
-      if(Array.isArray(entries)){
-        entries.forEach(item => {
-          const email = item && item.email;
-          if(!email) return;
-          if(!window.userPicks['Mon'][email]){
-            window.userPicks['Mon'][email] = Array(fillLen).fill('');
-          } else if(window.userPicks['Mon'][email].length < fillLen){
-            const arr = window.userPicks['Mon'][email];
-            while(arr.length < fillLen) arr.push('');
-          }
-          if(Array.isArray(window.users) && !window.users.find(u => u.username === email)){
-            window.users.push({ username: email, thurs:0, fri:0, sat:0, sun:0, mon:0, total:0 });
-          }
-        });
-      }
-      if(Array.isArray(window.users)){
-        window.users.forEach(u => {
-          const email = u && u.username;
-          if(!email) return;
-          const arr = window.userPicks['Mon'][email];
-          if(!Array.isArray(arr)){
-            window.userPicks['Mon'][email] = Array(fillLen).fill('');
-          } else if(arr.length < fillLen){
-            while(arr.length < fillLen) arr.push('');
-          }
-        });
-      }
       mondayPicksHydrated = true;
       if(typeof window.recalcPoints === 'function'){
         try { window.recalcPoints('Mon'); } catch(_e){}
