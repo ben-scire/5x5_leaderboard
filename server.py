@@ -237,7 +237,7 @@ HARD_PICKS = _load_thursday()
 if not HARD_PICKS:
     # Fallback embedded picks only if JSON missing/empty (ensures historical Thursday data still available)
     HARD_PICKS = {
-        "kylejkz11@gmail.com": ["NYG", "OVER", "YES"],
+        "kylejkz11@gmail.com": ["PHI", "OVER", "YES"],
         "max1solov@gmail.com": ["NYG", "OVER", "YES"],
         "samuel.lehman3337@gmail.com": ["PHI", "OVER", "YES"],
         "shawnscottcarl@gmail.com": ["PHI", "OVER", "YES"],
