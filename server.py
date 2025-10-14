@@ -23,30 +23,7 @@ MONDAY_LABELS = [
 # frontend arrays stay aligned with the six Monday pick definitions above. Start
 # times roughly reflect the double-header kickoff window and are only used for
 # display fallbacks when live data is unavailable.
-MONDAY_SCHEDULE = [
-    {
-        'sport': 'NFL',
-        'eventId': None,
-        'away': 'Buffalo Bills',
-        'awayAbbr': 'BUF',
-        'home': 'Atlanta Falcons',
-        'homeAbbr': 'ATL',
-        'lineHome': 3.5,   # Home team catching 3.5
-        'total': 49.5,
-        'start': '2025-10-13T23:15:00Z'
-    },
-    {
-        'sport': 'NFL',
-        'eventId': None,
-        'away': 'Chicago Bears',
-        'awayAbbr': 'CHI',
-        'home': 'Washington Commanders',
-        'homeAbbr': 'WSH',
-        'lineHome': -5.5,
-        'total': 48.5,
-        'start': '2025-10-14T00:15:00Z'
-    }
-]
+
 MONDAY_FILE = pathlib.Path('data/picks/monday_picks.json')
 MONDAY_LOCK_FILE = pathlib.Path('data/picks/monday_locked.json')
 MONDAY_PREFILL_DEFAULT = {
@@ -75,77 +52,6 @@ MONDAY_PREFILL_DEFAULT = {
 def monday_labels():
     return jsonify({ 'ok': True, 'labels': MONDAY_LABELS })
 
-
-# Monday get picks for user
-@app.route('/api/picks/monday/get')
-def monday_get():
-    email = (request.args.get('email') or '').strip().lower()
-    picks = MONDAY_PICKS.get(email, [''] * len(MONDAY_LABELS))
-    if not isinstance(picks, list):
-        picks = [''] * len(MONDAY_LABELS)
-    if len(picks) < len(MONDAY_LABELS):
-        picks = picks + [''] * (len(MONDAY_LABELS) - len(picks))
-    if len(picks) > len(MONDAY_LABELS):
-        picks = picks[:len(MONDAY_LABELS)]
-    picks = [str(p or '').strip().upper() for p in picks]
-    return jsonify({ 'ok': True, 'email': email, 'picks': picks })
-
-
-# Monday submit picks for user (mimic Sunday logic exactly)
-@app.route('/api/picks/monday/submit', methods=['POST'])
-def monday_submit():
-    payload = request.get_json(force=True, silent=True) or {}
-    email = (payload.get('email') or '').strip().lower()
-    picks = payload.get('picks') or []
-    pin = str(payload.get('pin') or '').strip()
-    if not email:
-        return jsonify({ 'ok': False, 'error': 'email_required' }), 400
-    if email not in ALLOWED_EMAILS:
-        return jsonify({ 'ok': False, 'error': 'unauthorized_email' }), 403
-    if not _check_pin(email, pin):
-        return jsonify({ 'ok': False, 'error': 'invalid_pin' }), 403
-    if not isinstance(picks, list):
-        return jsonify({ 'ok': False, 'error': 'invalid_picks_type' }), 400
-    # Allow partial submissions; pad/truncate
-    if len(picks) > len(MONDAY_LABELS): picks = picks[:len(MONDAY_LABELS)]
-    if len(picks) < len(MONDAY_LABELS): picks = picks + ['']*(len(MONDAY_LABELS)-len(picks))
-    existing = MONDAY_PICKS.get(email, ['']*len(MONDAY_LABELS))
-    updated=[]
-    for idx,val in enumerate(picks):
-        # If you want per-game locking for Monday, add logic here (currently not implemented)
-        updated.append(str(val or '').strip().upper())
-    MONDAY_PICKS[email] = updated
-    if not _save_monday(MONDAY_PICKS):
-        return jsonify({ 'ok': False, 'error': 'persist_failed' }), 500
-    # Append to CSV log with timestamp for recovery/export
-    ts_iso = datetime.datetime.utcnow().replace(microsecond=0).isoformat()
-    try:
-        _append_monday_log(ts_iso, email, updated)
-        MONDAY_TS_MAP[email] = ts_iso
-    except Exception:
-        pass
-    _refresh_monday()
-    return jsonify({ 'ok': True, 'saved': True, 'ts_iso': ts_iso })
-
-# Monday status endpoint
-@app.route('/api/picks/monday/status')
-def monday_status():
-    # List of all allowed emails
-    emails = set()
-    try:
-        from flask import current_app
-        emails = set(current_app.config.get('ALLOWED_EMAILS', []))
-    except Exception:
-        pass
-    if not emails:
-        # fallback to global ALLOWED_EMAILS if available
-        try:
-            emails = set(ALLOWED_EMAILS)
-        except Exception:
-            emails = set(MONDAY_PICKS.keys())
-    submitted = [e for e in emails if e in MONDAY_PICKS and any(MONDAY_PICKS[e])]
-    missing = [e for e in emails if e not in MONDAY_PICKS or not any(MONDAY_PICKS[e])]
-    return jsonify({ 'ok': True, 'submitted': submitted, 'missing': missing })
 
 
 # ---- Admin: Hard override a single user's Sunday picks (partial or full) ----
