@@ -530,6 +530,52 @@ def admin_fs_read():
         return jsonify({ 'ok': False, 'error': str(e) }), 400
 
 
+@app.route('/api/admin/fs/search')
+def admin_fs_search():
+    if not _admin_ok(request):
+        return jsonify({ 'ok': False, 'error': 'forbidden' }), 403
+    pattern = (request.args.get('q') or request.args.get('pattern') or '').strip().lower()
+    if not pattern:
+        return jsonify({ 'ok': False, 'error': 'missing pattern' }), 400
+    root = pathlib.Path('.').resolve()
+    results = []
+    max_results = int(request.args.get('max', '400'))
+    try:
+        for p in root.rglob('*'):
+            try:
+                name_lower = p.name.lower()
+                if pattern in name_lower:
+                    st = p.stat()
+                    results.append({
+                        'path': str(p),
+                        'isDir': p.is_dir(),
+                        'size': 0 if p.is_dir() else st.st_size,
+                        'mtime': int(st.st_mtime)
+                    })
+                    if len(results) >= max_results:
+                        break
+            except Exception:
+                continue
+        return jsonify({ 'ok': True, 'pattern': pattern, 'count': len(results), 'results': results })
+    except Exception as e:
+        return jsonify({ 'ok': False, 'error': str(e) }), 500
+
+
+@app.route('/api/meta/render')
+def meta_render():
+    try:
+        info = {
+            'ok': True,
+            'service_id': os.environ.get('RENDER_SERVICE_ID', ''),
+            'service_name': os.environ.get('RENDER_SERVICE_NAME', ''),
+            'region': os.environ.get('RENDER_REGION', ''),
+            'mounted_data_path': str(pathlib.Path('data').resolve()),
+            'cwd': str(pathlib.Path('.').resolve()),
+        }
+        return jsonify(info)
+    except Exception as e:
+        return jsonify({ 'ok': False, 'error': str(e) }), 500
+
 
 # ---- Admin: Hard override a single user's Sunday picks (partial or full) ----
 @app.route('/api/admin/sunday/override_user', methods=['POST'])
