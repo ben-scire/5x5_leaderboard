@@ -88,6 +88,8 @@ def admin_sunday_override_user():
     return jsonify({ 'ok': True, 'email': email, 'before': before, 'after': adj })
 """Ultra-minimal Thursday-only leaderboard server (fully cleaned version)."""
 # Friday final winners (spread picks): index aligned with FRIDAY_LABELS
+# Final outcomes for the single Thursday game
+RESULTS = ['NYG', 'OVER', 'YES']
 FRIDAY_RESULTS = ['USF', 'WASH']
 # Monday final results (6 picks: ATL, UNDER, YES, CHI, OVER, YES)
 MONDAY_RESULTS = ['ATL', 'UNDER', 'YES', 'CHI', 'OVER', 'YES']
