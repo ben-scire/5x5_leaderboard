@@ -172,31 +172,7 @@ Sunday picks still use JSON submission with phrase auth. Monday logic is isolate
 <!-- Trimmed legacy duplicated sections removed to satisfy markdown lint rules -->
 <!-- (Removed duplicate H1 to satisfy markdown lint MD025) -->
 
-This project now supports centralized Sunday pick submission using a small Node/Express server.
-
-## Local Development
-
-1. Install dependencies:
-
-```powershell
-npm init -y
-npm install express
-```
-
-
-1. Set an admin token (PowerShell example):
-
-```powershell
-$env:ADMIN_TOKEN = "change_me_secret"
-```
-
-1. Start the server:
-
-```powershell
-node server.js
-```
-
-1. Open `leaderboard.html` in a browser. Update client JS to post Sunday picks to your server URL (see below adjustments you can integrate).
+Legacy note: the Node/Express prototype (`server.js`) has been fully retired in favor of the Flask app (`server.py`). Use the PowerShell steps above (virtualenv + `python server.py`) for local development.
 
 ## API
 
@@ -230,11 +206,11 @@ If you were previously sharing the page via:
 python -m http.server 8000
 ```
 
-You can instead run the Node server (which also serves the static HTML) and get centralized pick storage:
+The Flask server already serves the static HTML alongside the APIs:
 
 ```powershell
-$env:ADMIN_TOKEN="change_me_secret"
-node server.js
+$env:FLASK_ENV="development"  # optional
+python server.py
 ```
 
 Then access: `http://YOUR_IP:8000/leaderboard.html`
@@ -269,7 +245,7 @@ Do NOT expose the admin token publicly.
 
 ## Production Deployment (GoDaddy Domain)
 
-You have two backend codepaths: legacy Node (`server.js`) and newer Flask (`server.py`). Pick one for production to keep resource use low.
+The legacy Node backend has been removed; Flask (`server.py`) is now the single production path.
 
 ### Option A: Deploy Flask (recommended for current week logic)
 
@@ -343,7 +319,7 @@ sudo certbot --nginx -d 5x5coach.com -d www.5x5coach.com --redirect
 ```
 
 ### Option B: Deploy Node
-Run a systemd service executing: `node server.js` bound to :8000, proxy via Nginx similarly. Replace `proxy_pass` port with 8000.
+Run a systemd service executing the Gunicorn command above (or `python server.py` for a lightweight test) bound to :8000, proxy via Nginx similarly. Replace `proxy_pass` port with 8000.
 
 ### Throttled Live Fetching
 `leaderboard.js` now fetches ESPN summaries no more than once every 60s (internal guard + interval) to minimize risk of rate limiting.
@@ -355,5 +331,5 @@ Ensure `/opt/leaderboard/data` owned by service user (e.g., `chown -R leaderboar
 ```
 
 ### Choosing Back End
-If you only need static leaderboard + CSV ingest + minimal auth, prefer Flask for smaller dependency surface (just Flask + gunicorn). Remove unused platform (delete `server.js` or `server.py`) to avoid confusion.
+If you only need static leaderboard + CSV ingest + minimal auth, Flask (with gunicorn) keeps the dependency surface minimal.
 
