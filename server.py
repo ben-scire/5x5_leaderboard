@@ -740,6 +740,8 @@ def _aggregate_all_users():
         base.update(SATURDAY_PICKS.keys())
     if 'SUNDAY_PICKS' in globals():
         base.update(SUNDAY_PICKS.keys())
+    if 'MONDAY_PICKS' in globals():
+        base.update(MONDAY_PICKS.keys())
     return sorted(base)
 
 ALL_USERS = _aggregate_all_users()
@@ -1646,7 +1648,7 @@ def api_leaderboard():
     entries = compute_scores()
     return jsonify({
         'ok': True,
-        'dayOrder': ['Thu','Fri','Sat','Sun'],
+        'dayOrder': ['Thu','Fri','Sat','Sun','Mon'],
         'totalPossible': TOTAL_POSSIBLE,
         'entries': entries,
         'generated': int(time.time()*1000)
