@@ -95,6 +95,48 @@ const finalResults = {
   } catch(e){ /* silent */ }
 })();
 
+// Monday hydration: ensure locked picks populate immediately so MNF scoring
+// shows for every user on the main leaderboard.
+(async function hydrateMondayPicksEarly(){
+  try {
+    const r = await fetch('/api/picks/public?day=Mon',{cache:'no-store'});
+    if(!r.ok) return;
+    const j = await r.json();
+    const entries = (j && j.entries) || {};
+    const baseLen = (picksLabels && picksLabels.Mon && picksLabels.Mon.length) || 0;
+    let targetLen = baseLen;
+    Object.keys(entries).forEach(email=>{
+      const rec = entries[email] || {};
+      const arr = Array.isArray(rec.picks) ? rec.picks : [];
+      let needed = targetLen || arr.length || 6;
+      if(needed < arr.length) needed = arr.length;
+      if(needed > targetLen) targetLen = needed;
+      let adj = arr.slice(0, needed);
+      while(adj.length < needed) adj.push('');
+      userPicks.Mon[email] = adj;
+      if(!users.find(u=>u.username===email)){
+        users.push({ username:email, thurs:0,fri:0,sat:0,sun:0,mon:0,total:0 });
+      }
+    });
+    const fillLen = targetLen || 6;
+    if(Array.isArray(users)){
+      users.forEach(u=>{
+        let arr = userPicks.Mon[u.username];
+        if(!Array.isArray(arr)){
+          arr = Array(fillLen).fill('');
+          userPicks.Mon[u.username] = arr;
+        } else if(arr.length < fillLen){
+          while(arr.length < fillLen) arr.push('');
+        }
+      });
+    }
+    if(typeof recalcPoints==='function') recalcPoints('Mon');
+    if(typeof recalcTotal==='function') recalcTotal();
+    if(typeof updateLeaderboard==='function') updateLeaderboard();
+    if(typeof renderPicksTable==='function') renderPicksTable('Mon');
+  } catch(e){ /* silent */ }
+})();
+
 function abbrevUser(u){ return nicknameMap[u.username] || u.username.split('@')[0]; }
 // Determine which side is covering given a home-based spread (negative => home favored, positive => away favored)
 // Robust spread resolver (home-based line):
@@ -371,6 +413,14 @@ function updateLeaderboard(){
   const sunActual   = users.map(u=> pointsForDay('Sun', u));
   const monActual   = users.map(u=> pointsForDay('Mon', u));
 
+  const answeredCounts = {
+    Thu: (picksLabels.Thu || []).length,
+    Fri: (picksLabels.Fri || []).length,
+    Sat: (picksLabels.Sat || []).length,
+    Sun: (picksLabels.Sun || []).length,
+    Mon: (picksLabels.Mon || []).length
+  };
+
   // Only actual values used (projections removed)
   let thursVals = thursActual.slice();
   let friVals   = friActual.slice();
@@ -382,16 +432,37 @@ function updateLeaderboard(){
   users.forEach((u,i)=>{
     u.thurs = thursActual[i];
     u.fri   = friActual[i];
-  const rawSat = satActual[i];
-  u.sat   = Math.min(6, Math.max(0, rawSat));
-  u.sun   = sunActual[i]; // actual correct Sunday picks
-    u.mon   = monActual[i];
+    const rawSat = satActual[i];
+    const satCap = answeredCounts.Sat || rawSat;
+    u.sat = Math.max(0, Math.min(satCap, rawSat));
+    u.sun   = sunActual[i]; // actual correct Sunday picks
+    const monCap = answeredCounts.Mon || monActual[i];
+    u.mon   = Math.max(0, Math.min(monCap, monActual[i]));
     u.total = u.thurs + u.fri + u.sat + u.sun + u.mon;
     delete u._thursProj; delete u._friProj; delete u._satProj; delete u._sunProj; delete u._monProj; delete u._projTotal;
   });
 
-  // Sort by actual total only
-  users.sort((a,b)=> (b.total||0) - (a.total||0));
+  // Optional debug view of actual points per day
+  if (window.DEBUG_POINTS) {
+    const diag = users.map(u => ({
+      user: u.username,
+      Thu: Number(u.thurs||0),
+      Fri: Number(u.fri||0),
+      Sat: Number(u.sat||0),
+      Sun: Number(u.sun||0),
+      Mon: Number(u.mon||0),
+      Total: Number(u.total||0),
+      Mode: 'Actual'
+    }));
+    console.table(diag);
+  }
+
+  // Sort by total, then by email for stability when tied
+  users.sort((a,b)=>{
+    const diff = (b.total||0) - (a.total||0);
+    if(diff !== 0) return diff;
+    return String(a.username||'').localeCompare(String(b.username||''));
+  });
 
   // After sorting, rebuild the arrays in sorted order
   const labels = users.map(abbrevUser);
@@ -401,22 +472,7 @@ function updateLeaderboard(){
   sunVals   = users.map(u=> u.sun);
   monVals   = users.map(u=> u.mon);
 
-  if (window.DEBUG_POINTS) {
-    const diag = users.map((u, i) => ({
-      user: u.username,
-      Thu: thursVals[i],
-      Fri: friVals[i],
-      Sat: satVals[i],
-  Sun: sunVals[i],
-      Mon: monVals[i],
-      Total: thursVals[i] + friVals[i] + satVals[i] + sunVals[i] + monVals[i],
-  Mode: 'Actual'
-    }));
-    console.table(diag);
-  }
-
-  const totalsArr = users.map((_,i)=> thursVals[i] + friVals[i] + satVals[i] + sunVals[i] + monVals[i]);
-  const leaderScore = totalsArr.length? Math.max(...totalsArr): 0;
+  const leaderScore = users.length ? Math.max(...users.map(u => Number(u.total||0))) : 0;
   // (Winning odds calculation removed per request.)
   const canvasEl = document.getElementById('leaderboardChart');
   if(!canvasEl){ return; }
@@ -468,7 +524,7 @@ function updateLeaderboard(){
 // Saturday: enforce authoritative finals array (overwrite any prior incorrect values, e.g. Oregon -> Indiana)
 try {
   if(Array.isArray(coveredPicks['Sat'])){
-    const finals = ['Ohio State','Missouri','Indiana','Texas','Georgia','BYU'];
+    const finals = ['Illinois','Missouri','Indiana','Oklahoma','Georgia','BYU'];
     finals.forEach((f,i)=>{ coveredPicks['Sat'][i] = f; });
     recalcPoints('Sat');
     recalcTotal();
@@ -493,6 +549,18 @@ try {
   updateLeaderboard();
   console.log('[Sun Finals] Applied authoritative finals (server-aligned)', sunFinals);
 } catch(e){ console.warn('[Sun Finals] apply failed', e); }
+
+// Monday: ensure final MNF results populate even without live fetch fallback.
+try {
+  if(Array.isArray(coveredPicks['Mon'])){
+    const finals = ['ATL','UNDER','YES','CHI','OVER','YES'];
+    finals.forEach((f,i)=>{ coveredPicks['Mon'][i] = f; });
+    recalcPoints('Mon');
+    recalcTotal();
+    updateLeaderboard();
+    console.log('[Mon Finals] Applied authoritative finals', finals);
+  }
+} catch(e){ console.warn('[Mon Finals] apply failed', e); }
 
 // Hard normalization pass: upgrade any raw user pick spelled exactly 'OHIO ST' to 'OHIO STATE'
 function normalizeOhioStatePicks(){
@@ -578,7 +646,7 @@ normalizeSaturdayUserPicks();
 
 // Robust post-load enforcement & blank pick repair for Saturday
 function enforceSaturdayFinals(){
-  const finals = ['Ohio State','Missouri','Indiana','Texas','Georgia','BYU'];
+    const finals = ['Illinois','Missouri','Indiana','Oklahoma','Georgia','BYU'];
   if(!Array.isArray(coveredPicks['Sat'])) coveredPicks['Sat'] = [];
   for(let i=0;i<finals.length;i++) coveredPicks['Sat'][i] = finals[i];
   recalcPoints('Sat'); recalcTotal(); updateLeaderboard();
