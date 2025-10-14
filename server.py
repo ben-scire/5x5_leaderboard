@@ -380,6 +380,59 @@ def monday_import_endpoint():
     return jsonify({ 'ok': True, 'imported': imported, 'appended': appended, 'saved': saved, 'count': len(MONDAY_PICKS) })
 
 
+# --- Monday admin: purge blank-only entries (and optionally rewrite CSV log) ---
+@app.route('/api/picks/monday/purge_blanks', methods=['POST'])
+def monday_purge_blanks():
+    # Optional ADMIN_TOKEN gate
+    token = request.args.get('token') or request.headers.get('X-Admin-Token')
+    admin_token = os.environ.get('ADMIN_TOKEN')
+    if admin_token and token != admin_token:
+        return jsonify({ 'ok': False, 'error': 'forbidden' }), 403
+    rewrite_log = (request.args.get('rewriteLog') in ('1','true','yes'))
+
+    # Identify blank-only entries
+    to_purge = [e for e,p in MONDAY_PICKS.items() if isinstance(p, list) and not any(p)]
+    for e in to_purge:
+        try:
+            del MONDAY_PICKS[e]
+        except Exception:
+            pass
+        try:
+            if e in MONDAY_TS_MAP:
+                del MONDAY_TS_MAP[e]
+        except Exception:
+            pass
+
+    saved = _save_monday(MONDAY_PICKS)
+    removed_rows = 0
+
+    if rewrite_log and MONDAY_LOG_FILE.exists():
+        try:
+            import io
+            # Read all and filter out rows where all picks are blank
+            with MONDAY_LOG_FILE.open('r', encoding='utf-8') as f:
+                rdr = csv.DictReader(f)
+                rows = list(rdr)
+                fieldnames = rdr.fieldnames or ['ts_iso','email'] + [f'pick{i+1}' for i in range(len(MONDAY_LABELS))]
+            kept = []
+            for r in rows:
+                picks = [(r.get(f'pick{i+1}') or '').strip() for i in range(len(MONDAY_LABELS))]
+                if any(picks):
+                    kept.append(r)
+                else:
+                    removed_rows += 1
+            # Rewrite
+            with MONDAY_LOG_FILE.open('w', encoding='utf-8', newline='') as f:
+                w = csv.DictWriter(f, fieldnames=fieldnames)
+                w.writeheader()
+                for r in kept:
+                    w.writerow({k: r.get(k, '') for k in fieldnames})
+        except Exception as e:
+            return jsonify({ 'ok': False, 'error': f'log_rewrite_failed: {e}', 'purged': len(to_purge), 'saved': saved }), 500
+
+    _refresh_monday()
+    return jsonify({ 'ok': True, 'purged': len(to_purge), 'saved': saved, 'log_rows_removed': removed_rows, 'count': len(MONDAY_PICKS) })
+
 # --- Monday log metadata (lightweight debug) ---
 @app.route('/api/picks/monday/log/meta')
 def monday_log_meta():
