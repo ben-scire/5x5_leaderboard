@@ -375,6 +375,97 @@ def monday_import_endpoint():
     return jsonify({ 'ok': True, 'imported': imported, 'appended': appended, 'saved': saved, 'count': len(MONDAY_PICKS) })
 
 
+# --- Monday log metadata (lightweight debug) ---
+@app.route('/api/picks/monday/log/meta')
+def monday_log_meta():
+    try:
+        exists = MONDAY_LOG_FILE.exists()
+        size = MONDAY_LOG_FILE.stat().st_size if exists else 0
+        lines = 0
+        if exists:
+            with MONDAY_LOG_FILE.open('r', encoding='utf-8', errors='ignore') as f:
+                for _ in f:
+                    lines += 1
+        return jsonify({ 'ok': True, 'exists': exists, 'size': size, 'lines': lines, 'path': str(MONDAY_LOG_FILE) })
+    except Exception as e:
+        return jsonify({ 'ok': False, 'error': str(e) }), 500
+
+
+# --- Admin-only filesystem introspection (for recovery/debug) ---
+def _admin_ok(req) -> bool:
+    token = req.args.get('token') or req.headers.get('X-Admin-Token')
+    admin_token = os.environ.get('ADMIN_TOKEN')
+    return (not admin_token) or (token == admin_token)
+
+
+def _safe_under_data_or_recovered(rel: str) -> pathlib.Path:
+    base = pathlib.Path(rel)
+    if base.is_absolute():
+        p = base
+    else:
+        p = pathlib.Path('.') / base
+    p = p.resolve()
+    root = pathlib.Path('.').resolve()
+    if root not in p.parents and p != root:
+        raise ValueError('path escapes project root')
+    # must be data/ or recovered/
+    parts = [q.name for q in [p] + list(p.parents)]
+    if ('data' not in parts) and ('recovered' not in parts) and p.name not in ('data','recovered'):
+        raise ValueError('path must be under data/ or recovered/')
+    return p
+
+
+@app.route('/api/admin/fs/list')
+def admin_fs_list():
+    if not _admin_ok(request):
+        return jsonify({ 'ok': False, 'error': 'forbidden' }), 403
+    rel = request.args.get('path', 'data')
+    try:
+        p = _safe_under_data_or_recovered(rel)
+        if not p.exists():
+            return jsonify({ 'ok': False, 'error': f'not_found: {rel}' }), 404
+        if p.is_file():
+            st = p.stat()
+            return jsonify({ 'ok': True, 'file': { 'path': str(p), 'size': st.st_size, 'mtime': int(st.st_mtime) } })
+        items = []
+        for child in sorted(p.iterdir(), key=lambda x: x.name.lower()):
+            try:
+                st = child.stat()
+                items.append({
+                    'name': child.name,
+                    'path': str(child),
+                    'isDir': child.is_dir(),
+                    'size': st.st_size,
+                    'mtime': int(st.st_mtime)
+                })
+            except Exception:
+                items.append({ 'name': child.name, 'path': str(child), 'error': 'stat_failed' })
+        return jsonify({ 'ok': True, 'path': str(p), 'items': items })
+    except Exception as e:
+        return jsonify({ 'ok': False, 'error': str(e) }), 400
+
+
+@app.route('/api/admin/fs/read')
+def admin_fs_read():
+    if not _admin_ok(request):
+        return jsonify({ 'ok': False, 'error': 'forbidden' }), 403
+    rel = request.args.get('path')
+    limit = int(request.args.get('limit', '200000'))
+    if not rel:
+        return jsonify({ 'ok': False, 'error': 'missing path' }), 400
+    try:
+        p = _safe_under_data_or_recovered(rel)
+        if not p.exists() or not p.is_file():
+            return jsonify({ 'ok': False, 'error': 'file not found' }), 404
+        size = p.stat().st_size
+        with p.open('r', encoding='utf-8', errors='ignore') as f:
+            content = f.read(limit)
+        truncated = size > len(content)
+        return jsonify({ 'ok': True, 'path': str(p), 'size': size, 'truncated': truncated, 'content': content })
+    except Exception as e:
+        return jsonify({ 'ok': False, 'error': str(e) }), 400
+
+
 
 # ---- Admin: Hard override a single user's Sunday picks (partial or full) ----
 @app.route('/api/admin/sunday/override_user', methods=['POST'])
