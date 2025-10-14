@@ -10,6 +10,58 @@
 
   let schedule = null; // loaded schedule
   let leaderboard = null; // last leaderboard payload
+  let mondayPicksHydrated = false; // ensure we only backfill MNF picks once
+
+  async function ensureMondayPublicPicks(entries){
+    if(mondayPicksHydrated) return;
+    const expected = Array.isArray(entries) ? entries.length : 0;
+    if(!expected) return;
+    const store = (window.userPicks && window.userPicks['Mon']) || {};
+    const have = Object.values(store).filter(arr => Array.isArray(arr) && arr.some(v => {
+      if(v == null) return false;
+      const s = typeof v === 'string' ? v.trim() : String(v).trim();
+      return s.length > 0;
+    })).length;
+    if(have >= expected){
+      mondayPicksHydrated = true;
+      return;
+    }
+    try {
+      const resp = await fetch('/api/picks/public?day=Mon', { cache: 'no-store' });
+      if(!resp.ok) return;
+      const payload = await resp.json();
+      const pubEntries = (payload && payload.entries) || {};
+      if(!window.userPicks) window.userPicks = { Mon: {} };
+      if(!window.userPicks['Mon']) window.userPicks['Mon'] = {};
+      const labels = (window.picksLabels && window.picksLabels['Mon']) || [];
+      Object.keys(pubEntries).forEach(email => {
+        const rec = pubEntries[email] || {};
+        const raw = Array.isArray(rec.picks) ? rec.picks : [];
+        const needed = labels.length || raw.length;
+        const adj = raw.slice(0, needed);
+        while(adj.length < needed) adj.push('');
+        window.userPicks['Mon'][email] = adj;
+        if(Array.isArray(window.users) && !window.users.find(u => u.username === email)){
+          window.users.push({ username: email, thurs:0, fri:0, sat:0, sun:0, mon:0, total:0 });
+        }
+      });
+      mondayPicksHydrated = true;
+      if(typeof window.recalcPoints === 'function'){
+        try { window.recalcPoints('Mon'); } catch(_e){}
+      }
+      if(typeof window.recalcTotal === 'function'){
+        try { window.recalcTotal(); } catch(_e){}
+      }
+      if(typeof window.updateLeaderboard === 'function'){
+        try { window.updateLeaderboard(); } catch(_e){}
+      }
+      if(typeof window.renderPicksTable === 'function' && window.picksDay === 'Mon'){
+        try { window.renderPicksTable('Mon'); } catch(_e){}
+      }
+    } catch(err){
+      console.warn('[live] Monday picks hydration failed', err);
+    }
+  }
 
   function $(id){ return document.getElementById(id); }
 
@@ -161,6 +213,8 @@
         if(typeof window.updateLeaderboard==='function') window.updateLeaderboard();
       }
     } catch(syncErr){ console.warn('[live] users sync (scores) failed', syncErr); }
+
+    ensureMondayPublicPicks(entries);
   }
 
   async function refresh(){
