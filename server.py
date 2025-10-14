@@ -17,6 +17,36 @@ MONDAY_LABELS = [
     'NFL: CHI +5.5 @ WSH (Total O/U 48.5)',
     'NFL: CHI +5.5 @ WSH (Prop: Jayden Daniels OR Caleb Williams Anytime rush/rec TD)'
 ]
+
+# Static MNF schedule used by the leaderboard to render Monday rows. The event
+# IDs are optional (games are already complete) but we keep placeholders so the
+# frontend arrays stay aligned with the six Monday pick definitions above. Start
+# times roughly reflect the double-header kickoff window and are only used for
+# display fallbacks when live data is unavailable.
+MONDAY_SCHEDULE = [
+    {
+        'sport': 'NFL',
+        'eventId': None,
+        'away': 'Buffalo Bills',
+        'awayAbbr': 'BUF',
+        'home': 'Atlanta Falcons',
+        'homeAbbr': 'ATL',
+        'lineHome': 3.5,   # Home team catching 3.5
+        'total': 49.5,
+        'start': '2025-10-13T23:15:00Z'
+    },
+    {
+        'sport': 'NFL',
+        'eventId': None,
+        'away': 'Chicago Bears',
+        'awayAbbr': 'CHI',
+        'home': 'Washington Commanders',
+        'homeAbbr': 'WSH',
+        'lineHome': -5.5,
+        'total': 48.5,
+        'start': '2025-10-14T00:15:00Z'
+    }
+]
 MONDAY_FILE = pathlib.Path('data/picks/monday_picks.json')
 MONDAY_LOCK_FILE = pathlib.Path('data/picks/monday_locked.json')
 MONDAY_PREFILL_DEFAULT = {
@@ -1731,6 +1761,21 @@ def api_picks_public():
             'ok': True,
             'entries': { email: { 'picks': picks, 'ts': now } for email, picks in SUNDAY_PICKS.items() }
         })
+    if day.startswith('mon'):
+        now = int(time.time()*1000)
+        if 'MONDAY_PICKS' in globals():
+            try:
+                _refresh_monday()
+            except Exception:
+                pass
+            return jsonify({
+                'ok': True,
+                'entries': {
+                    email: { 'picks': picks, 'ts': now }
+                    for email, picks in MONDAY_PICKS.items()
+                }
+            })
+        return jsonify({ 'ok': False, 'error': 'monday_unavailable' }), 503
     return jsonify({ 'ok': False, 'error': 'unsupported_day' }), 400
 
 @app.route('/api/picks/status/<day_key>')
@@ -1758,6 +1803,22 @@ def picks_status_generic(day_key):
         submitted = sorted(SUNDAY_PICKS.keys())
         missing = [u for u in ALL_USERS if u not in SUNDAY_PICKS]
         return jsonify({ 'ok': True, 'day': 'Sun', 'submitted': submitted, 'missing': missing, 'submittedCount': len(submitted), 'missingCount': len(missing) })
+    if dk.startswith('mon'):
+        if 'MONDAY_PICKS' in globals():
+            try:
+                _refresh_monday()
+            except Exception:
+                pass
+            submitted = sorted(email for email, picks in MONDAY_PICKS.items() if any(picks))
+            missing = [u for u in ALL_USERS if u not in MONDAY_PICKS or not any(MONDAY_PICKS[u])]
+            return jsonify({
+                'ok': True,
+                'day': 'Mon',
+                'submitted': submitted,
+                'missing': missing,
+                'submittedCount': len(submitted),
+                'missingCount': len(missing)
+            })
     return jsonify({ 'ok': False, 'error': 'unsupported_day' }), 400
 
 @app.route('/api/debug/thu')
@@ -1815,16 +1876,36 @@ def api_schedule():
     """Provide schedule JSON consumed by schedule_init.js (Fri + Sat)."""
     days = {
         'Fri': {
+            'order': 2,
             'games': FRIDAY_SCHEDULE,
-            'picks': [ { 'label': lbl } for lbl in FRIDAY_LABELS ]
+            'picks': [
+                { 'label': lbl, 'result': (FRIDAY_RESULTS[idx] if idx < len(FRIDAY_RESULTS) else None) }
+                for idx, lbl in enumerate(FRIDAY_LABELS)
+            ]
         },
         'Sat': {
+            'order': 3,
             'games': SATURDAY_SCHEDULE,
-            'picks': [ { 'label': lbl } for lbl in SATURDAY_LABELS ]
+            'picks': [
+                { 'label': lbl, 'result': (SATURDAY_RESULTS[idx] if idx < len(SATURDAY_RESULTS) else None) }
+                for idx, lbl in enumerate(SATURDAY_LABELS)
+            ]
         },
         'Sun': {
+            'order': 4,
             'games': SUNDAY_SCHEDULE,
-            'picks': [ { 'label': lbl } for lbl in SUNDAY_LABELS ]
+            'picks': [
+                { 'label': lbl, 'result': (SUNDAY_RESULTS[idx] if idx < len(SUNDAY_RESULTS) else None) }
+                for idx, lbl in enumerate(SUNDAY_LABELS)
+            ]
+        },
+        'Mon': {
+            'order': 5,
+            'games': MONDAY_SCHEDULE,
+            'picks': [
+                { 'label': lbl, 'result': (MONDAY_RESULTS[idx] if idx < len(MONDAY_RESULTS) else None) }
+                for idx, lbl in enumerate(MONDAY_LABELS)
+            ]
         }
     }
     return jsonify({ 'ok': True, 'version': VERSION, 'days': days })
