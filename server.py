@@ -87,7 +87,30 @@ def admin_sunday_override_user():
     _refresh_all_users()
     return jsonify({ 'ok': True, 'email': email, 'before': before, 'after': adj })
 """Ultra-minimal Thursday-only leaderboard server (fully cleaned version)."""
-
+# Friday final winners (spread picks): index aligned with FRIDAY_LABELS
+FRIDAY_RESULTS = ['USF', 'WASH']
+# Monday final results (6 picks: ATL, UNDER, YES, CHI, OVER, YES)
+MONDAY_RESULTS = ['ATL', 'UNDER', 'YES', 'CHI', 'OVER', 'YES']
+# Saturday final results (6 games, canonical full names)
+SATURDAY_RESULTS = [
+    'OHIO STATE',
+    'MISSOURI',
+    'INDIANA',
+    'TEXAS',
+    'GEORGIA',
+    'BYU'
+]
+# Sunday results: include all finalized winners; last game still pending.
+SUNDAY_RESULTS = [
+    'NYJ',  # Game 0 DEN @ NYJ (final)
+    'PIT',  # Game 1 CLE @ PIT (final)
+    'MIA',  # Game 2 LAC @ MIA (final)
+    'NE',   # Game 3 NE @ NO (final)  (restored original index 3)
+    'LAR',  # Game 4 LAR @ BAL (final) (restored original index 4)
+    'SEA',  # Game 5 SEA @ JAX (final)
+    'TB',   # Game 6 SF @ TB (final)
+    'KC'    # Game 7 DET @ KC (final)
+]
 # Authoritative Thursday picks now fully external in data/picks/thursday_picks.json (no embedded fallback)
 DATA_OVERRIDE_PATH = pathlib.Path('data/picks/thursday_picks.json')
 def _load_thursday():
@@ -230,15 +253,7 @@ TOTAL_POSSIBLE = len(RESULTS) + len(FRIDAY_RESULTS) + len(SATURDAY_RESULTS) + le
 # 2. Static assets (css/js) keep cacheable names but we append a ?v=VERSION query in HTML.
 #    When you change VERSION constant above, bump ASSET_TAG below or directly edit HTML query strings.
 
-@app.after_request
-def _add_cache_headers(resp):
-    ct = (resp.mimetype or '').lower()
-    # Strong no-cache for HTML and JSON API responses to avoid stale schedule/picks data in browsers or CDN.
-    if 'text/html' in ct or 'application/json' in ct:
-        resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
-        resp.headers['Pragma'] = 'no-cache'
-        resp.headers['Expires'] = '0'
-    return resp
+
 
 # --- Simple persistent storage for Friday picks (new feature) ---
 FRIDAY_FILE = pathlib.Path('data/picks/friday_picks.json')
