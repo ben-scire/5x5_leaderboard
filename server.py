@@ -702,8 +702,8 @@ RUNTIME_FORCE_SATURDAY_JSON = True  # runtime flag also locked on so reload logi
 RESULTS = ['NYG', 'OVER', 'YES']  # Thursday: spread winner, total, prop
 # Friday final winners (spread picks): index aligned with FRIDAY_LABELS
 FRIDAY_RESULTS = ['USF', 'WASH']
-# Monday final results (6 picks: ATL, UNDER, YES, CHI, OVER, YES)
-MONDAY_RESULTS = ['ATL', 'UNDER', 'YES', 'CHI', 'OVER', 'YES']
+# Monday final results (6 picks: BUF, UNDER, YES, CHI, OVER, YES)
+MONDAY_RESULTS = ['BUF', 'UNDER', 'YES', 'CHI', 'OVER', 'YES']
 # Saturday final results (6 games, canonical full names)
 SATURDAY_RESULTS = [
     'OHIO STATE',
