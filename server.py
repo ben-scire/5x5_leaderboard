@@ -226,7 +226,14 @@ def monday_labels():
 @app.route('/api/picks/monday/get')
 def monday_get():
     email = (request.args.get('email') or '').strip().lower()
-    picks = MONDAY_PICKS.get(email, ['']*len(MONDAY_LABELS))
+    picks = MONDAY_PICKS.get(email, [''] * len(MONDAY_LABELS))
+    if not isinstance(picks, list):
+        picks = [''] * len(MONDAY_LABELS)
+    if len(picks) < len(MONDAY_LABELS):
+        picks = picks + [''] * (len(MONDAY_LABELS) - len(picks))
+    if len(picks) > len(MONDAY_LABELS):
+        picks = picks[:len(MONDAY_LABELS)]
+    picks = [str(p or '').strip().upper() for p in picks]
     return jsonify({ 'ok': True, 'email': email, 'picks': picks })
 
 
