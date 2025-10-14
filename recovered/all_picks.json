@@ -3,8 +3,9 @@
   "counts": {
     "Thu": 17,
     "Fri": 0,
-    "Sat": 0,
-    "Sun": 0
+    "Sat": 17,
+    "Sun": 0,
+    "Mon": 17
   },
   "emailsTotalUnion": 17,
   "days": {
@@ -96,7 +97,282 @@
       ]
     },
     "Fri": {},
-    "Sat": {},
-    "Sun": {}
+    "Sat": {
+      "scire.ben@gmail.com": [
+        "ILL",
+        "ALA",
+        "ORE",
+        "TEX",
+        "UGA",
+        "BYU"
+      ],
+      "max1solov@gmail.com": [
+        "OHIO ST",
+        "MIZ",
+        "IND",
+        "OKLA",
+        "UGA",
+        "ARIZ"
+      ],
+      "amacdonald171@gmail.com": [
+        "ILL",
+        "ALA",
+        "IND",
+        "TEX",
+        "UGA",
+        "BYU"
+      ],
+      "williamjabbott22@gmail.com": [
+        "OHIO ST",
+        "ALA",
+        "IND",
+        "OKLA",
+        "UGA",
+        "BYU"
+      ],
+      "jakelehman100@gmail.com": [
+        "ILL",
+        "ALA",
+        "ORE",
+        "OKLA",
+        "AUB",
+        "ARIZ"
+      ],
+      "timjbohlman@gmail.com": [
+        "OHIO ST",
+        "MIZ",
+        "IND",
+        "OKLA",
+        "AUB",
+        "BYU"
+      ],
+      "wyaggy3@gmail.com": [
+        "OHIO ST",
+        "ALA",
+        "ORE",
+        "OKLA",
+        "AUB",
+        "ARIZ"
+      ],
+      "sam.scire@hotmail.com": [
+        "OHIO ST",
+        "ALA",
+        "IND",
+        "TEX",
+        "UGA",
+        "BYU"
+      ],
+      "kylejkz11@gmail.com": [
+        "OHIO ST",
+        "MIZ",
+        "ORE",
+        "OKLA",
+        "AUB",
+        "ARIZ"
+      ],
+      "samuel.lehman3337@gmail.com": [
+        "ILL",
+        "MIZ",
+        "IND",
+        "TEX",
+        "AUB",
+        "BYU"
+      ],
+      "goodnoughdylan@gmail.com": [
+        "OHIO ST",
+        "MIZ",
+        "ORE",
+        "TEX",
+        "AUB",
+        "BYU"
+      ],
+      "shawnscottcarl@gmail.com": [
+        "OHIO ST",
+        "ALA",
+        "ORE",
+        "OKLA",
+        "AUB",
+        "BYU"
+      ],
+      "jlindsey3428@gmail.com": [
+        "ILL",
+        "ALA",
+        "ORE",
+        "OKLA",
+        "AUB",
+        "BYU"
+      ],
+      "hankrudden@yahoo.com": [
+        "ILL",
+        "ALA",
+        "ORE",
+        "TEX",
+        "AUB",
+        "ARIZ"
+      ],
+      "soligonaustin@outlook.com": [
+        "ILL",
+        "ALA",
+        "ORE",
+        "OKLA",
+        "UGA",
+        "ARIZ"
+      ],
+      "finsmaniac1551@gmail.com": [
+        "OHIO ST",
+        "ALA",
+        "ORE",
+        "TEX",
+        "AUB",
+        "ARIZ"
+      ],
+      "jaked9577@yahoo.com": [
+        "ILLINOIS",
+        "ALABAMA",
+        "OREGON",
+        "OKLAHOMA",
+        "AUBURN",
+        "ARIZONA"
+      ]
+    },
+    "Sun": {},
+    "Mon": {
+      "kylejkz11@gmail.com": [
+        "",
+        "",
+        "",
+        "",
+        "",
+        ""
+      ],
+      "max1solov@gmail.com": [
+        "",
+        "",
+        "",
+        "",
+        "",
+        ""
+      ],
+      "samuel.lehman3337@gmail.com": [
+        "",
+        "",
+        "",
+        "",
+        "",
+        ""
+      ],
+      "shawnscottcarl@gmail.com": [
+        "",
+        "",
+        "",
+        "",
+        "",
+        ""
+      ],
+      "finsmaniac1551@gmail.com": [
+        "",
+        "",
+        "",
+        "",
+        "",
+        ""
+      ],
+      "jakelehman100@gmail.com": [
+        "",
+        "",
+        "",
+        "",
+        "",
+        ""
+      ],
+      "hankrudden@yahoo.com": [
+        "",
+        "",
+        "",
+        "",
+        "",
+        ""
+      ],
+      "scire.ben@gmail.com": [
+        "",
+        "",
+        "",
+        "",
+        "",
+        ""
+      ],
+      "williamjabbott22@gmail.com": [
+        "",
+        "",
+        "",
+        "",
+        "",
+        ""
+      ],
+      "timjbohlman@gmail.com": [
+        "",
+        "",
+        "",
+        "",
+        "",
+        ""
+      ],
+      "goodnoughdylan@gmail.com": [
+        "",
+        "",
+        "",
+        "",
+        "",
+        ""
+      ],
+      "jaked9577@yahoo.com": [
+        "",
+        "",
+        "",
+        "",
+        "",
+        ""
+      ],
+      "sam.scire@hotmail.com": [
+        "",
+        "",
+        "",
+        "",
+        "",
+        ""
+      ],
+      "soligonaustin@outlook.com": [
+        "",
+        "",
+        "",
+        "",
+        "",
+        ""
+      ],
+      "amacdonald171@gmail.com": [
+        "",
+        "",
+        "",
+        "",
+        "",
+        ""
+      ],
+      "jlindsey3428@gmail.com": [
+        "",
+        "",
+        "",
+        "",
+        "",
+        ""
+      ],
+      "wyaggy3@gmail.com": [
+        "",
+        "",
+        "",
+        "",
+        "",
+        ""
+      ]
+    }
   }
 }

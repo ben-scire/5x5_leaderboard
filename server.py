@@ -282,6 +282,11 @@ def api_picks_submissions():
     if day not in ('Mon','Sun','Sat','Fri','Thu'):
         return jsonify({ 'ok': False, 'error': 'unsupported day' }), 400
     if day == 'Mon':
+        # Refresh from disk so multi-worker processes return consistent state
+        try:
+            _refresh_monday()
+        except Exception:
+            pass
         out = { e: { 'picks': p, 'ts_iso': MONDAY_TS_MAP.get(e, '') } for e,p in MONDAY_PICKS.items() }
         return jsonify({ 'ok': True, 'day': 'Mon', 'entries': out })
     return jsonify({ 'ok': True, 'day': day, 'entries': {} })
