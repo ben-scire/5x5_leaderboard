@@ -192,16 +192,16 @@ def admin_sunday_override_user():
 """Ultra-minimal Thursday-only leaderboard server (fully cleaned version)."""
 # Friday final winners (spread picks): index aligned with FRIDAY_LABELS
 # Final outcomes for the single Thursday game
-RESULTS = ['NYG', 'OVER', 'YES']
-FRIDAY_RESULTS = ['USF', 'WASH']
-# Monday final results (6 picks: ATL, UNDER, YES, CHI, OVER, YES)
-MONDAY_RESULTS = ['ATL', 'UNDER', 'YES', 'CHI', 'OVER', 'YES']
+RESULTS = ['NYG', 'OVER', 'NO']
+FRIDAY_RESULTS = ['USF', 'RUT']
+# Monday final results (6 picks: ATL cover, total under, prop NO; CHI cover, total over, prop YES)
+MONDAY_RESULTS = ['ATL', 'UNDER', 'NO', 'CHI', 'OVER', 'YES']
 # Saturday final results (6 games, canonical full names)
 SATURDAY_RESULTS = [
-    'OHIO STATE',
+    'ILLINOIS',
     'MISSOURI',
     'INDIANA',
-    'TEXAS',
+    'OKLAHOMA',
     'GEORGIA',
     'BYU'
 ]

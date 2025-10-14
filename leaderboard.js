@@ -277,12 +277,12 @@ try {
   if (picksLabels && Array.isArray(picksLabels['Thu']) && /Anytime TD/i.test(picksLabels['Thu'][2]||'')) {
     if (!Array.isArray(coveredPicks['Thu'])) coveredPicks['Thu'] = [];
     if (coveredPicks['Thu'][2] == null) { // only set if not already determined
-      coveredPicks['Thu'][2] = 'YES';
+      coveredPicks['Thu'][2] = 'NO';
       if (typeof recalcPoints === 'function') { recalcPoints('Thu'); }
       if (typeof recalcTotal === 'function') { recalcTotal(); }
       if (typeof updateLeaderboard === 'function') { updateLeaderboard(); }
       if (typeof renderPicksTable === 'function') { try { renderPicksTable('Thu'); } catch(_){} }
-      console.log('[PropResolved] Thursday prop auto-marked as YES');
+      console.log('[PropResolved] Thursday prop auto-marked as NO');
     }
   }
   // Force Thursday TOTAL (index 1) to OVER if not already set (server final says OVER)
@@ -426,10 +426,12 @@ function updateLeaderboard(){
   users.forEach((u,i)=>{
     u.thurs = thursActual[i];
     u.fri   = friActual[i];
-  const rawSat = satActual[i];
-  u.sat   = Math.min(6, Math.max(0, rawSat));
-  u.sun   = sunActual[i]; // actual correct Sunday picks
-    u.mon   = monActual[i];
+    const rawSat = satActual[i];
+    const satCap = answeredCounts.Sat || rawSat;
+    u.sat = Math.max(0, Math.min(satCap, rawSat));
+    u.sun   = sunActual[i]; // actual correct Sunday picks
+    const monCap = answeredCounts.Mon || monActual[i];
+    u.mon   = Math.max(0, Math.min(monCap, monActual[i]));
     u.total = u.thurs + u.fri + u.sat + u.sun + u.mon;
     delete u._thursProj; delete u._friProj; delete u._satProj; delete u._sunProj; delete u._monProj; delete u._projTotal;
   });
@@ -522,22 +524,7 @@ function updateLeaderboard(){
   sunVals   = users.map(u=> u.sun);
   monVals   = users.map(u=> u.mon);
 
-  if (window.DEBUG_POINTS) {
-    const diag = users.map((u, i) => ({
-      user: u.username,
-      Thu: thursVals[i],
-      Fri: friVals[i],
-      Sat: satVals[i],
-  Sun: sunVals[i],
-      Mon: monVals[i],
-      Total: thursVals[i] + friVals[i] + satVals[i] + sunVals[i] + monVals[i],
-  Mode: 'Actual'
-    }));
-    console.table(diag);
-  }
-
-  const totalsArr = users.map((_,i)=> thursVals[i] + friVals[i] + satVals[i] + sunVals[i] + monVals[i]);
-  const leaderScore = totalsArr.length? Math.max(...totalsArr): 0;
+  const leaderScore = users.length ? Math.max(...users.map(u => Number(u.total||0))) : 0;
   // (Winning odds calculation removed per request.)
   const canvasEl = document.getElementById('leaderboardChart');
   if(!canvasEl){ return; }
@@ -589,7 +576,7 @@ function updateLeaderboard(){
 // Saturday: enforce authoritative finals array (overwrite any prior incorrect values, e.g. Oregon -> Indiana)
 try {
   if(Array.isArray(coveredPicks['Sat'])){
-    const finals = ['Ohio State','Missouri','Indiana','Texas','Georgia','BYU'];
+    const finals = ['Illinois','Missouri','Indiana','Oklahoma','Georgia','BYU'];
     finals.forEach((f,i)=>{ coveredPicks['Sat'][i] = f; });
     recalcPoints('Sat');
     recalcTotal();
@@ -614,6 +601,18 @@ try {
   updateLeaderboard();
   console.log('[Sun Finals] Applied authoritative finals (server-aligned)', sunFinals);
 } catch(e){ console.warn('[Sun Finals] apply failed', e); }
+
+// Monday: ensure final MNF results populate even without live fetch fallback.
+try {
+  if(Array.isArray(coveredPicks['Mon'])){
+    const finals = ['ATL','UNDER','NO','CHI','OVER','YES'];
+    finals.forEach((f,i)=>{ coveredPicks['Mon'][i] = f; });
+    recalcPoints('Mon');
+    recalcTotal();
+    updateLeaderboard();
+    console.log('[Mon Finals] Applied authoritative finals', finals);
+  }
+} catch(e){ console.warn('[Mon Finals] apply failed', e); }
 
 // Hard normalization pass: upgrade any raw user pick spelled exactly 'OHIO ST' to 'OHIO STATE'
 function normalizeOhioStatePicks(){
@@ -699,7 +698,7 @@ normalizeSaturdayUserPicks();
 
 // Robust post-load enforcement & blank pick repair for Saturday
 function enforceSaturdayFinals(){
-  const finals = ['Ohio State','Missouri','Indiana','Texas','Georgia','BYU'];
+    const finals = ['Illinois','Missouri','Indiana','Oklahoma','Georgia','BYU'];
   if(!Array.isArray(coveredPicks['Sat'])) coveredPicks['Sat'] = [];
   for(let i=0;i<finals.length;i++) coveredPicks['Sat'][i] = finals[i];
   recalcPoints('Sat'); recalcTotal(); updateLeaderboard();
