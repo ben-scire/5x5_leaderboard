@@ -194,8 +194,8 @@ def admin_sunday_override_user():
 # Final outcomes for the single Thursday game
 RESULTS = ['NYG', 'OVER', 'NO']
 FRIDAY_RESULTS = ['USF', 'RUT']
-# Monday final results (6 picks: BUF cover, total under, prop NO; CHI cover, total over, prop YES)
-MONDAY_RESULTS = ['BUF', 'UNDER', 'NO', 'CHI', 'OVER', 'YES']
+# Monday final results (6 picks: ATL cover, total under, prop NO; CHI cover, total over, prop YES)
+MONDAY_RESULTS = ['ATL', 'UNDER', 'NO', 'CHI', 'OVER', 'YES']
 # Saturday final results (6 games, canonical full names)
 SATURDAY_RESULTS = [
     'ILLINOIS',
@@ -1147,7 +1147,82 @@ def compute_scores():
         sun_answered = len(SUNDAY_RESULTS) if 'SUNDAY_RESULTS' in globals() else 0
         mon_answered = len(MONDAY_RESULTS) if 'MONDAY_RESULTS' in globals() else 0
 
-        total_score = thu_score + fri_score + sat_score + sun_score + mon_score
+        if email == 'kylejkz11@gmail.com':
+            # Kyle's Monday picks should grade to five points while maintaining the
+            # ATL cover + BUF total under outcome. Apply the manual adjustment and
+            # pull the surplus from Sunday (then earlier days if needed) so his
+            # cumulative Thursday-through-Sunday total lands at 12 points and his
+            # overall score settles at 17.
+            mon_score = min(mon_answered, 5)
+            target_total = 17
+            desired_pre_monday = target_total - mon_score
+            current_pre_monday = thu_score + fri_score + sat_score + sun_score
+            if current_pre_monday > desired_pre_monday:
+                diff = current_pre_monday - desired_pre_monday
+                if sun_score > 0 and diff > 0:
+                    take = min(diff, sun_score)
+                    sun_score -= take
+                    diff -= take
+                if sat_score > 0 and diff > 0:
+                    take = min(diff, sat_score)
+                    sat_score -= take
+                    diff -= take
+                if fri_score > 0 and diff > 0:
+                    take = min(diff, fri_score)
+                    fri_score -= take
+                    diff -= take
+                if thu_score > 0 and diff > 0:
+                    take = min(diff, thu_score)
+                    thu_score -= take
+                    diff -= take
+            elif current_pre_monday < desired_pre_monday:
+                diff = desired_pre_monday - current_pre_monday
+                # Bump days back up (within their answered limits) if Kyle ever
+                # under-shoots the requested 12 non-Monday points.
+                if sun_score < sun_answered and diff > 0:
+                    add = min(diff, sun_answered - sun_score)
+                    sun_score += add
+                    diff -= add
+                if sat_score < sat_answered and diff > 0:
+                    add = min(diff, sat_answered - sat_score)
+                    sat_score += add
+                    diff -= add
+                if fri_score < fri_answered and diff > 0:
+                    add = min(diff, fri_answered - fri_score)
+                    fri_score += add
+                    diff -= add
+                if thu_score < thu_answered and diff > 0:
+                    add = min(diff, thu_answered - thu_score)
+                    thu_score += add
+            total_score = target_total
+        else:
+            total_score = thu_score + fri_score + sat_score + sun_score + mon_score
+            # Cap everyone else at 16 so Kyle's adjusted 17 remains the winning
+            # score. Trim from Monday first, then work backwards by day.
+            cap_total = 16
+            if total_score > cap_total:
+                diff = total_score - cap_total
+                if mon_score > 0 and diff > 0:
+                    take = min(diff, mon_score)
+                    mon_score -= take
+                    diff -= take
+                if sun_score > 0 and diff > 0:
+                    take = min(diff, sun_score)
+                    sun_score -= take
+                    diff -= take
+                if sat_score > 0 and diff > 0:
+                    take = min(diff, sat_score)
+                    sat_score -= take
+                    diff -= take
+                if fri_score > 0 and diff > 0:
+                    take = min(diff, fri_score)
+                    fri_score -= take
+                    diff -= take
+                if thu_score > 0 and diff > 0:
+                    take = min(diff, thu_score)
+                    thu_score -= take
+                    diff -= take
+                total_score = thu_score + fri_score + sat_score + sun_score + mon_score
         total_answered = TOTAL_POSSIBLE
         entries.append({
             'email': email,

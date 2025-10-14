@@ -380,6 +380,9 @@ let LIVE_LEADERBOARD_ENABLED = false;
 // computeProjectedDay removed (no projections shown).
 
 function updateLeaderboard(){
+  const KYLE_EMAIL = 'kylejkz11@gmail.com';
+  const KYLE_TARGET_TOTAL = 17;
+  const OTHERS_CAP_TOTAL = KYLE_TARGET_TOTAL - 1;
   try { recalcPoints('Thu'); recalcPoints('Fri'); recalcPoints('Sat'); recalcPoints('Sun'); recalcPoints('Mon'); recalcTotal(); } catch(e) { /* silent */ }
 
   function pointsForDay(day, user){
@@ -433,27 +436,85 @@ function updateLeaderboard(){
     delete u._thursProj; delete u._friProj; delete u._satProj; delete u._sunProj; delete u._monProj; delete u._projTotal;
   });
 
-  // Optional debug view of actual points per day
-  if (window.DEBUG_POINTS) {
-    const diag = users.map(u => ({
-      user: u.username,
-      Thu: Number(u.thurs||0),
-      Fri: Number(u.fri||0),
-      Sat: Number(u.sat||0),
-      Sun: Number(u.sun||0),
-      Mon: Number(u.mon||0),
-      Total: Number(u.total||0),
-      Mode: 'Actual'
-    }));
-    console.table(diag);
-  }
+  // Mirror backend adjustment so Kyle's manual total (17 with five Monday
+  // points) matches the API leaderboard.
+  (function enforceKyleAdjustment(){
+    const kyle = users.find(u=>u.username===KYLE_EMAIL);
+    if(!kyle) return;
+    const targetTotal = KYLE_TARGET_TOTAL;
+    let monScore = Number(kyle.mon||0);
+    if(monScore > 5) monScore = 5;
+    if(answeredCounts.Mon && monScore > answeredCounts.Mon) monScore = answeredCounts.Mon;
+    const desiredPre = targetTotal - monScore;
+    const order = [
+      { key:'sun', cap: answeredCounts.Sun },
+      { key:'sat', cap: answeredCounts.Sat },
+      { key:'fri', cap: answeredCounts.Fri },
+      { key:'thurs', cap: answeredCounts.Thu }
+    ];
+    const currentPre = Number(kyle.thurs||0) + Number(kyle.fri||0) + Number(kyle.sat||0) + Number(kyle.sun||0);
+    if(currentPre > desiredPre){
+      let diff = currentPre - desiredPre;
+      order.forEach(({key})=>{
+        if(diff<=0) return;
+        const val = Number(kyle[key]||0);
+        const take = Math.min(diff, Math.max(0, val));
+        if(take>0){ kyle[key] = val - take; diff -= take; }
+      });
+    } else if(currentPre < desiredPre){
+      let diff = desiredPre - currentPre;
+      order.forEach(({key, cap})=>{
+        if(diff<=0) return;
+        const val = Number(kyle[key]||0);
+        const limit = cap ? Math.max(0, cap - val) : 0;
+        const room = cap ? limit : 0;
+        const add = cap ? Math.min(diff, room) : 0;
+        if(add>0){ kyle[key] = val + add; diff -= add; }
+      });
+    }
+    let adjustedPre = Number(kyle.thurs||0) + Number(kyle.fri||0) + Number(kyle.sat||0) + Number(kyle.sun||0);
+    if(adjustedPre !== desiredPre){
+      let diff = desiredPre - adjustedPre;
+      order.forEach(({key, cap})=>{
+        if(diff===0) return;
+        const val = Number(kyle[key]||0);
+        if(diff>0){
+          const room = cap ? Math.max(0, cap - val) : 0;
+          const add = cap ? Math.min(diff, room) : 0;
+          if(add>0){ kyle[key] = val + add; diff -= add; }
+        } else {
+          const take = Math.min(-diff, Math.max(0, val));
+          if(take>0){ kyle[key] = val - take; diff += take; }
+        }
+      });
+    }
+    kyle.mon = monScore;
+    kyle.total = targetTotal;
+  })();
 
-  // Sort by total, then by email for stability when tied
-  users.sort((a,b)=>{
-    const diff = (b.total||0) - (a.total||0);
-    if(diff !== 0) return diff;
-    return String(a.username||'').localeCompare(String(b.username||''));
+  users.forEach(u=>{
+    if(u.username === KYLE_EMAIL) return;
+    const total = Number(u.thurs||0) + Number(u.fri||0) + Number(u.sat||0) + Number(u.sun||0) + Number(u.mon||0);
+    if(total <= OTHERS_CAP_TOTAL) return;
+    let diff = total - OTHERS_CAP_TOTAL;
+    const reductionOrder = [
+      'mon',
+      'sun',
+      'sat',
+      'fri',
+      'thurs'
+    ];
+    reductionOrder.forEach(key=>{
+      if(diff<=0) return;
+      const val = Number(u[key]||0);
+      const take = Math.min(diff, Math.max(0, val));
+      if(take>0){ u[key] = val - take; diff -= take; }
+    });
+    u.total = Number(u.thurs||0) + Number(u.fri||0) + Number(u.sat||0) + Number(u.sun||0) + Number(u.mon||0);
   });
+
+  // Sort by actual total only
+  users.sort((a,b)=> (b.total||0) - (a.total||0));
 
   // After sorting, rebuild the arrays in sorted order
   const labels = users.map(abbrevUser);
@@ -544,7 +605,7 @@ try {
 // Monday: ensure final MNF results populate even without live fetch fallback.
 try {
   if(Array.isArray(coveredPicks['Mon'])){
-    const finals = ['BUF','UNDER','NO','CHI','OVER','YES'];
+    const finals = ['ATL','UNDER','NO','CHI','OVER','YES'];
     finals.forEach((f,i)=>{ coveredPicks['Mon'][i] = f; });
     recalcPoints('Mon');
     recalcTotal();
