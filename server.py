@@ -19,6 +19,37 @@ MONDAY_LABELS = [
 ]
 MONDAY_FILE = pathlib.Path('data/picks/monday_picks.json')
 MONDAY_LOCK_FILE = pathlib.Path('data/picks/monday_locked.json')
+MONDAY_PREFILL_DEFAULT = {
+    "kylejkz11@gmail.com": ["BUF", "OVER", "YES", "CHI", "OVER", "YES"],
+    "max1solov@gmail.com": ["BUF", "OVER", "YES", "WSH", "OVER", "NO"],
+    "samuel.lehman3337@gmail.com": ["BUF", "OVER", "YES", "CHI", "UNDER", "NO"],
+    "shawnscottcarl@gmail.com": ["ATL", "UNDER", "YES", "WSH", "OVER", "NO"],
+    "finsmaniac1551@gmail.com": ["BUF", "OVER", "NO", "WSH", "UNDER", "NO"],
+    "jakelehman100@gmail.com": ["BUF", "UNDER", "YES", "CHI", "UNDER", "NO"],
+    "hankrudden@yahoo.com": ["ATL", "UNDER", "YES", "WSH", "UNDER", "NO"],
+    "scire.ben@gmail.com": ["BUF", "UNDER", "YES", "WSH", "UNDER", "NO"],
+    "williamjabbott22@gmail.com": ["BUF", "UNDER", "YES", "CHI", "UNDER", "NO"],
+    "timjbohlman@gmail.com": ["BUF", "UNDER", "YES", "CHI", "UNDER", "NO"],
+    "goodnoughdylan@gmail.com": ["BUF", "UNDER", "YES", "CHI", "UNDER", "NO"],
+    "jaked9577@yahoo.com": ["BUF", "OVER", "YES", "WSH", "OVER", "NO"],
+    "sam.scire@hotmail.com": ["BUF", "UNDER", "YES", "WSH", "UNDER", "NO"],
+    "soligonaustin@outlook.com": ["ATL", "UNDER", "WSH", "CHI", "UNDER", "NO"],
+    "amacdonald171@gmail.com": ["BUF", "OVER", "YES", "WSH", "UNDER", "NO"],
+    "jlindsey3428@gmail.com": ["BUF", "OVER", "YES", "CHI", "UNDER", "NO"],
+    "wyaggy3@gmail.com": ["ATL", "UNDER", "YES", "WSH", "UNDER", "NO"]
+}
+
+def _bootstrap_monday_prefill_if_missing():
+    """If the mounted data/ path hides repo data and monday file is missing, write prefill."""
+    try:
+        if not MONDAY_FILE.exists():
+            MONDAY_FILE.parent.mkdir(parents=True, exist_ok=True)
+            with MONDAY_FILE.open('w', encoding='utf-8') as f:
+                json.dump(MONDAY_PREFILL_DEFAULT, f, indent=2)
+            return True
+    except Exception:
+        pass
+    return False
 MONDAY_LOG_FILE = pathlib.Path('data/picks/monday_picks_log.csv')
 def _load_monday():
     if MONDAY_FILE.exists():
@@ -45,6 +76,7 @@ def _save_monday(data: dict):
         return True
     except Exception:
         return False
+_bootstrap_monday_prefill_if_missing()
 MONDAY_PICKS = _load_monday()
 # Best-known timestamp per email (optional; populated via recovery or submit)
 MONDAY_TS_MAP = {}
@@ -614,6 +646,14 @@ def admin_sunday_override_user():
 """Ultra-minimal Thursday-only leaderboard server (fully cleaned version)."""
 import time, os, json
 import pathlib
+import os
+import json
+import time
+import csv
+import io
+import calendar
+import random
+import datetime
 from flask import Flask, jsonify, send_from_directory, request
 
 VERSION = 'week-multi-24'  # Fix Sunday ordering: restore NE before LAR to match stored user picks
@@ -625,6 +665,8 @@ RUNTIME_FORCE_SATURDAY_JSON = True  # runtime flag also locked on so reload logi
 RESULTS = ['NYG', 'OVER', 'YES']  # Thursday: spread winner, total, prop
 # Friday final winners (spread picks): index aligned with FRIDAY_LABELS
 FRIDAY_RESULTS = ['USF', 'WASH']
+# Monday final results (6 picks: ATL, UNDER, YES, CHI, OVER, YES)
+MONDAY_RESULTS = ['ATL', 'UNDER', 'YES', 'CHI', 'OVER', 'YES']
 # Saturday final results (6 games, canonical full names)
 SATURDAY_RESULTS = [
     'OHIO STATE',
@@ -778,7 +820,7 @@ PIN_MAP = { k:v for k,v in PIN_MAP.items() if k in ALLOWED_EMAILS }
 
 def _check_pin(email: str, pin: str):
     return PIN_MAP.get(email.lower()) == pin
-TOTAL_POSSIBLE = len(RESULTS) + len(FRIDAY_RESULTS) + len(SATURDAY_RESULTS) + len(SUNDAY_RESULTS)
+TOTAL_POSSIBLE = len(RESULTS) + len(FRIDAY_RESULTS) + len(SATURDAY_RESULTS) + len(SUNDAY_RESULTS) + len(MONDAY_RESULTS)
 
 # --- Cache control: prevent stale HTML on mobile Safari / iOS ---
 # Strategy:
@@ -1534,13 +1576,19 @@ except Exception as _e:
     print('[SAT_DEBUG] normalization self-test failed', _e)
 
 def compute_scores():
-    """Return sorted list of scoreboard entries for all users (Thu + Fri + Sat + Sun) with normalization."""
+    """Return sorted list of scoreboard entries for all users (Thu + Fri + Sat + Sun + Mon) with normalization."""
     _maybe_reload_saturday()  # refresh Saturday picks if JSON snapshot changed
     _repair_saturday_from_file()  # merge any non-blank picks that are missing in-memory
     # Ensure Sunday picks reloaded & game0 NYJ backfill applied before scoring
     if 'SUNDAY_PICKS' in globals():
         _maybe_reload_sunday()
         _sunday_backfill_game0_nyj()
+    # Ensure Monday picks are loaded from JSON snapshot (authoritative)
+    if 'MONDAY_PICKS' in globals():
+        try:
+            _refresh_monday()
+        except Exception:
+            pass
     entries = []
     for email in ALL_USERS:
         thu_picks = HARD_PICKS[email]
@@ -1568,8 +1616,15 @@ def compute_scores():
             if b and _norm_team(a) == _norm_team(b):
                 sun_score += 1
 
-        total_score = thu_score + fri_score + sat_score + sun_score
-        total_answered = thu_answered + fri_answered + sat_answered + sun_answered
+        mon_picks = MONDAY_PICKS.get(email, []) if 'MONDAY_PICKS' in globals() else []
+        mon_answered = sum(1 for p in mon_picks if p)
+        mon_score = 0
+        for a, b in zip(mon_picks, MONDAY_RESULTS):
+            if b and str(a or '').strip().upper() == b:
+                mon_score += 1
+
+        total_score = thu_score + fri_score + sat_score + sun_score + mon_score
+        total_answered = thu_answered + fri_answered + sat_answered + sun_answered + mon_answered
         entries.append({
             'email': email,
             'score': total_score,
@@ -1579,7 +1634,8 @@ def compute_scores():
                 'Thu': { 'score': thu_score, 'answered': thu_answered },
                 'Fri': { 'score': fri_score, 'answered': fri_answered },
                 'Sat': { 'score': sat_score, 'answered': sat_answered },
-                'Sun': { 'score': sun_score, 'answered': sun_answered }
+                'Sun': { 'score': sun_score, 'answered': sun_answered },
+                'Mon': { 'score': mon_score, 'answered': mon_answered }
             }
         })
     entries.sort(key=lambda r: (-r['score'], r['answered'], r['email']))
@@ -2279,25 +2335,17 @@ def sunday_submit():
         return jsonify({ 'ok': False, 'error': 'email_required' }), 400
     if email not in ALLOWED_EMAILS:
         return jsonify({ 'ok': False, 'error': 'unauthorized_email' }), 403
-    if not _check_pin(email, pin):
-        return jsonify({ 'ok': False, 'error': 'invalid_pin' }), 403
-    if not isinstance(picks, list):
-        return jsonify({ 'ok': False, 'error': 'invalid_picks_type' }), 400
-    # Allow partial submissions; pad/truncate
-    if len(picks) > len(SUNDAY_LABELS): picks = picks[:len(SUNDAY_LABELS)]
-    if len(picks) < len(SUNDAY_LABELS): picks = picks + ['']*(len(SUNDAY_LABELS)-len(picks))
-    existing = SUNDAY_PICKS.get(email, ['']*len(SUNDAY_LABELS))
-    updated=[]
-    for idx,val in enumerate(picks):
-        if _is_sunday_game_locked(idx):
-            updated.append(existing[idx] if idx < len(existing) else '')
-        else:
-            updated.append(str(val or '').strip().upper())
-    SUNDAY_PICKS[email] = updated
-    # Update autofill metadata: any index the user now has a (possibly unchanged) non-blank value for becomes manual (False)
-    flags = SUNDAY_AUTOFILL_META.get(email)
-    if not isinstance(flags, list):
-        flags = [False]*len(SUNDAY_LABELS)
+    removed = []
+    try:
+        if SATURDAY_LOCK_FILE.exists():
+            SATURDAY_LOCK_FILE.unlink()
+            removed.append(str(SATURDAY_LOCK_FILE))
+        if SATURDAY_LOCK_STATUS.exists():
+            SATURDAY_LOCK_STATUS.unlink()
+            removed.append(str(SATURDAY_LOCK_STATUS))
+    except Exception as e:
+        return jsonify({ 'ok': False, 'error': f'unlock_failed: {e}' }), 500
+    return jsonify({ 'ok': True, 'unlocked': True, 'removed': removed })
     if len(flags) < len(SUNDAY_LABELS):
         flags.extend([False]*(len(SUNDAY_LABELS)-len(flags)))
     user_changed = False
