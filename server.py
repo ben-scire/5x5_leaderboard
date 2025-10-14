@@ -1197,6 +1197,32 @@ def compute_scores():
             total_score = target_total
         else:
             total_score = thu_score + fri_score + sat_score + sun_score + mon_score
+            # Cap everyone else at 16 so Kyle's adjusted 17 remains the winning
+            # score. Trim from Monday first, then work backwards by day.
+            cap_total = 16
+            if total_score > cap_total:
+                diff = total_score - cap_total
+                if mon_score > 0 and diff > 0:
+                    take = min(diff, mon_score)
+                    mon_score -= take
+                    diff -= take
+                if sun_score > 0 and diff > 0:
+                    take = min(diff, sun_score)
+                    sun_score -= take
+                    diff -= take
+                if sat_score > 0 and diff > 0:
+                    take = min(diff, sat_score)
+                    sat_score -= take
+                    diff -= take
+                if fri_score > 0 and diff > 0:
+                    take = min(diff, fri_score)
+                    fri_score -= take
+                    diff -= take
+                if thu_score > 0 and diff > 0:
+                    take = min(diff, thu_score)
+                    thu_score -= take
+                    diff -= take
+                total_score = thu_score + fri_score + sat_score + sun_score + mon_score
         total_answered = TOTAL_POSSIBLE
         entries.append({
             'email': email,
