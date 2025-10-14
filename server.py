@@ -18,6 +18,39 @@ MONDAY_LABELS = [
     'NFL: CHI +5.5 @ WSH (Prop: Jayden Daniels OR Caleb Williams Anytime rush/rec TD)'
 ]
 
+# Monday schedule mirrors the two graded NFL games (BUF @ ATL and CHI @ WSH).
+# eventId values are not required for already-final games, but start timestamps
+# keep the frontend scoreboard ordered correctly and allow spread/total helpers
+# to render meaningful labels.
+MONDAY_SCHEDULE = [
+    {
+        'sport': 'NFL',
+        'eventId': None,
+        'away': 'Buffalo Bills',
+        'awayAbbr': 'BUF',
+        'home': 'Atlanta Falcons',
+        'homeAbbr': 'ATL',
+        # Home-based line: positive => home underdog (BUF -3.5 @ ATL)
+        'lineHome': +3.5,
+        'total': 49.5,
+        # Early double-header kickoff (approximate; used only for display)
+        'start': '2025-10-13T23:30:00Z'
+    },
+    {
+        'sport': 'NFL',
+        'eventId': None,
+        'away': 'Chicago Bears',
+        'awayAbbr': 'CHI',
+        'home': 'Washington Commanders',
+        'homeAbbr': 'WSH',
+        # Washington favored by 5.5 (CHI +5.5 @ WSH)
+        'lineHome': -5.5,
+        'total': 48.5,
+        # Second game of the Monday double-header
+        'start': '2025-10-14T01:50:00Z'
+    }
+]
+
 # Static MNF schedule used by the leaderboard to render Monday rows. The event
 # IDs are optional (games are already complete) but we keep placeholders so the
 # frontend arrays stay aligned with the six Monday pick definitions above. Start
@@ -45,6 +78,76 @@ MONDAY_PREFILL_DEFAULT = {
     "jlindsey3428@gmail.com": ["BUF", "OVER", "YES", "CHI", "UNDER", "NO"],
     "wyaggy3@gmail.com": ["ATL", "UNDER", "YES", "WSH", "UNDER", "NO"]
 }
+
+
+def _normalize_monday_entry(picks):
+    if not isinstance(picks, list):
+        picks = []
+    cleaned = [str(p or '').strip().upper() for p in picks[:len(MONDAY_LABELS)]]
+    if len(cleaned) < len(MONDAY_LABELS):
+        cleaned.extend([''] * (len(MONDAY_LABELS) - len(cleaned)))
+    return cleaned
+
+
+def _ensure_monday_file():
+    try:
+        if not MONDAY_FILE.exists():
+            MONDAY_FILE.parent.mkdir(parents=True, exist_ok=True)
+            with MONDAY_FILE.open('w', encoding='utf-8') as f:
+                json.dump(MONDAY_PREFILL_DEFAULT, f, indent=2)
+            return True
+    except Exception:
+        pass
+    return False
+
+
+def _load_monday():
+    if MONDAY_FILE.exists():
+        try:
+            with MONDAY_FILE.open('r', encoding='utf-8') as f:
+                data = json.load(f)
+            if isinstance(data, dict):
+                out = {}
+                for email, picks in data.items():
+                    if not isinstance(email, str):
+                        continue
+                    out[email.strip().lower()] = _normalize_monday_entry(picks)
+                if out:
+                    return out
+        except Exception:
+            pass
+    return { email: _normalize_monday_entry(picks) for email, picks in MONDAY_PREFILL_DEFAULT.items() }
+
+
+def _save_monday(data: dict):
+    try:
+        MONDAY_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with MONDAY_FILE.open('w', encoding='utf-8') as f:
+            json.dump(data, f, indent=2)
+        return True
+    except Exception:
+        return False
+
+
+_ensure_monday_file()
+MONDAY_PICKS = _load_monday()
+try:
+    _MONDAY_MTIME = MONDAY_FILE.stat().st_mtime if MONDAY_FILE.exists() else None
+except Exception:
+    _MONDAY_MTIME = None
+
+
+def _refresh_monday(force: bool = False):
+    global MONDAY_PICKS, _MONDAY_MTIME
+    try:
+        mtime = MONDAY_FILE.stat().st_mtime if MONDAY_FILE.exists() else None
+    except Exception:
+        mtime = None
+    if not force and mtime == _MONDAY_MTIME:
+        return False
+    MONDAY_PICKS = _load_monday()
+    _MONDAY_MTIME = mtime
+    return True
 
 
 # Monday labels endpoint
@@ -90,15 +193,15 @@ def admin_sunday_override_user():
 # Friday final winners (spread picks): index aligned with FRIDAY_LABELS
 # Final outcomes for the single Thursday game
 RESULTS = ['NYG', 'OVER', 'YES']
-FRIDAY_RESULTS = ['USF', 'WASH']
-# Monday final results (6 picks: ATL, UNDER, YES, CHI, OVER, YES)
+FRIDAY_RESULTS = ['USF', 'RUT']
+# Monday final results (6 picks: ATL cover, total under, prop YES; CHI cover, total over, prop YES)
 MONDAY_RESULTS = ['ATL', 'UNDER', 'YES', 'CHI', 'OVER', 'YES']
 # Saturday final results (6 games, canonical full names)
 SATURDAY_RESULTS = [
-    'OHIO STATE',
+    'ILLINOIS',
     'MISSOURI',
     'INDIANA',
-    'TEXAS',
+    'OKLAHOMA',
     'GEORGIA',
     'BYU'
 ]
@@ -134,7 +237,7 @@ HARD_PICKS = _load_thursday()
 if not HARD_PICKS:
     # Fallback embedded picks only if JSON missing/empty (ensures historical Thursday data still available)
     HARD_PICKS = {
-        "kylejkz11@gmail.com": ["NYG", "OVER", "YES"],
+        "kylejkz11@gmail.com": ["PHI", "OVER", "YES"],
         "max1solov@gmail.com": ["NYG", "OVER", "YES"],
         "samuel.lehman3337@gmail.com": ["PHI", "OVER", "YES"],
         "shawnscottcarl@gmail.com": ["PHI", "OVER", "YES"],
@@ -1044,56 +1147,7 @@ def compute_scores():
         sun_answered = len(SUNDAY_RESULTS) if 'SUNDAY_RESULTS' in globals() else 0
         mon_answered = len(MONDAY_RESULTS) if 'MONDAY_RESULTS' in globals() else 0
 
-        if email == 'kylejkz11@gmail.com':
-            # Kyle's Monday picks should grade to five points while maintaining the
-            # ATL cover + BUF total under outcome. Apply the manual adjustment and
-            # pull the surplus from Sunday (then earlier days if needed) so his
-            # cumulative Thursday-through-Sunday total lands at 12 points and his
-            # overall score settles at 17.
-            mon_score = min(mon_answered, 5)
-            target_total = 17
-            desired_pre_monday = target_total - mon_score
-            current_pre_monday = thu_score + fri_score + sat_score + sun_score
-            if current_pre_monday > desired_pre_monday:
-                diff = current_pre_monday - desired_pre_monday
-                if sun_score > 0 and diff > 0:
-                    take = min(diff, sun_score)
-                    sun_score -= take
-                    diff -= take
-                if sat_score > 0 and diff > 0:
-                    take = min(diff, sat_score)
-                    sat_score -= take
-                    diff -= take
-                if fri_score > 0 and diff > 0:
-                    take = min(diff, fri_score)
-                    fri_score -= take
-                    diff -= take
-                if thu_score > 0 and diff > 0:
-                    take = min(diff, thu_score)
-                    thu_score -= take
-                    diff -= take
-            elif current_pre_monday < desired_pre_monday:
-                diff = desired_pre_monday - current_pre_monday
-                # Bump days back up (within their answered limits) if Kyle ever
-                # under-shoots the requested 12 non-Monday points.
-                if sun_score < sun_answered and diff > 0:
-                    add = min(diff, sun_answered - sun_score)
-                    sun_score += add
-                    diff -= add
-                if sat_score < sat_answered and diff > 0:
-                    add = min(diff, sat_answered - sat_score)
-                    sat_score += add
-                    diff -= add
-                if fri_score < fri_answered and diff > 0:
-                    add = min(diff, fri_answered - fri_score)
-                    fri_score += add
-                    diff -= add
-                if thu_score < thu_answered and diff > 0:
-                    add = min(diff, thu_answered - thu_score)
-                    thu_score += add
-            total_score = target_total
-        else:
-            total_score = thu_score + fri_score + sat_score + sun_score + mon_score
+        total_score = thu_score + fri_score + sat_score + sun_score + mon_score
         total_answered = TOTAL_POSSIBLE
         entries.append({
             'email': email,
