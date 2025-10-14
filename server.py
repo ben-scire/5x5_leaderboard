@@ -72,6 +72,7 @@ MONDAY_PREFILL_DEFAULT = {
     "timjbohlman@gmail.com": ["BUF", "UNDER", "YES", "CHI", "UNDER", "NO"],
     "goodnoughdylan@gmail.com": ["BUF", "UNDER", "YES", "CHI", "UNDER", "NO"],
     "jaked9577@yahoo.com": ["BUF", "OVER", "YES", "WSH", "OVER", "NO"],
+    "sam.scire@gmail.com": ["BUF", "OVER", "NO", "WSH", "UNDER", "NO"],
     "sam.scire@hotmail.com": ["BUF", "UNDER", "YES", "WSH", "UNDER", "NO"],
     "soligonaustin@outlook.com": ["ATL", "UNDER", "WSH", "CHI", "UNDER", "NO"],
     "amacdonald171@gmail.com": ["BUF", "OVER", "YES", "WSH", "UNDER", "NO"],
@@ -1328,12 +1329,22 @@ def api_picks_public():
                 _refresh_monday()
             except Exception:
                 pass
+            label_count = len(MONDAY_LABELS)
+            all_emails = set(ALL_USERS)
+            try:
+                all_emails.update(MONDAY_PICKS.keys())
+            except Exception:
+                pass
+            entries = {}
+            for email in sorted(all_emails):
+                picks = MONDAY_PICKS.get(email, [])
+                normalized = _normalize_monday_entry(picks)
+                if label_count == 0 and isinstance(picks, list) and picks:
+                    normalized = [str(p or '').strip().upper() for p in picks]
+                entries[email] = { 'picks': normalized, 'ts': now }
             return jsonify({
                 'ok': True,
-                'entries': {
-                    email: { 'picks': picks, 'ts': now }
-                    for email, picks in MONDAY_PICKS.items()
-                }
+                'entries': entries
             })
         return jsonify({ 'ok': False, 'error': 'monday_unavailable' }), 503
     return jsonify({ 'ok': False, 'error': 'unsupported_day' }), 400
