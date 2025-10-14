@@ -286,6 +286,94 @@ def api_picks_submissions():
         return jsonify({ 'ok': True, 'day': 'Mon', 'entries': out })
     return jsonify({ 'ok': True, 'day': day, 'entries': {} })
 
+# --- Monday admin import (JSON or CSV) ---
+@app.route('/api/picks/monday/import', methods=['POST'])
+def monday_import_endpoint():
+    # Require ADMIN_TOKEN if set
+    token = request.args.get('token') or request.headers.get('X-Admin-Token')
+    admin_token = os.environ.get('ADMIN_TOKEN')
+    if admin_token and token != admin_token:
+        return jsonify({ 'ok': False, 'error': 'forbidden' }), 403
+    try:
+        payload = request.get_json(force=True, silent=True) or {}
+    except Exception:
+        payload = {}
+    imported = 0
+    appended = 0
+    # Accept one of: entries map, rows list, or csv text
+    entries = payload.get('entries') if isinstance(payload, dict) else None
+    rows = payload.get('rows') if isinstance(payload, dict) else None
+    csv_text = payload.get('csv') if isinstance(payload, dict) else None
+    # entries: { email: { picks:[...], ts_iso?: str } }
+    if isinstance(entries, dict):
+        for email, rec in entries.items():
+            if not isinstance(rec, dict):
+                continue
+            picks = rec.get('picks') if isinstance(rec.get('picks'), list) else []
+            ts_iso = rec.get('ts_iso') if isinstance(rec.get('ts_iso'), str) else None
+            before = MONDAY_PICKS.get((email or '').lower())
+            _merge_monday_entry(MONDAY_PICKS, MONDAY_TS_MAP, email, picks, ts_iso)
+            after = MONDAY_PICKS.get((email or '').lower())
+            if after and after != before:
+                imported += 1
+                if ts_iso:
+                    try:
+                        _append_monday_log(ts_iso, (email or '').lower(), after)
+                        appended += 1
+                    except Exception:
+                        pass
+    # rows: [ { ts_iso, email, pick1..pickN } ]
+    if isinstance(rows, list):
+        for r in rows:
+            if not isinstance(r, dict):
+                continue
+            email = (r.get('email') or '').strip().lower()
+            ts_iso = (r.get('ts_iso') or r.get('timestamp') or r.get('ts') or '').strip() or None
+            picks = []
+            for i in range(1, len(MONDAY_LABELS)+1):
+                picks.append((r.get(f'pick{i}') or '').strip().upper())
+            before = MONDAY_PICKS.get(email)
+            _merge_monday_entry(MONDAY_PICKS, MONDAY_TS_MAP, email, picks, ts_iso)
+            after = MONDAY_PICKS.get(email)
+            if after and after != before:
+                imported += 1
+                if ts_iso:
+                    try:
+                        _append_monday_log(ts_iso, email, after)
+                        appended += 1
+                    except Exception:
+                        pass
+    # csv: raw CSV text with headers: ts_iso,email,pick1..pickN
+    if isinstance(csv_text, str) and csv_text.strip():
+        try:
+            import io
+            rdr = csv.DictReader(io.StringIO(csv_text))
+            for r in rdr:
+                email = (r.get('email') or '').strip().lower()
+                ts_iso = (r.get('ts_iso') or r.get('timestamp') or r.get('ts') or '').strip() or None
+                picks = []
+                for i in range(1, len(MONDAY_LABELS)+1):
+                    picks.append((r.get(f'pick{i}') or '').strip().upper())
+                before = MONDAY_PICKS.get(email)
+                _merge_monday_entry(MONDAY_PICKS, MONDAY_TS_MAP, email, picks, ts_iso)
+                after = MONDAY_PICKS.get(email)
+                if after and after != before:
+                    imported += 1
+                    if ts_iso:
+                        try:
+                            _append_monday_log(ts_iso, email, after)
+                            appended += 1
+                        except Exception:
+                            pass
+        except Exception as e:
+            return jsonify({ 'ok': False, 'error': f'csv_parse_failed: {e}' }), 400
+    # Persist if we changed anything
+    saved = False
+    if imported:
+        saved = _save_monday(MONDAY_PICKS)
+        _refresh_monday()
+    return jsonify({ 'ok': True, 'imported': imported, 'appended': appended, 'saved': saved, 'count': len(MONDAY_PICKS) })
+
 
 
 # ---- Admin: Hard override a single user's Sunday picks (partial or full) ----
