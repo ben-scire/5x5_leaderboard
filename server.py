@@ -17,6 +17,36 @@ MONDAY_LABELS = [
     'NFL: CHI +5.5 @ WSH (Total O/U 48.5)',
     'NFL: CHI +5.5 @ WSH (Prop: Jayden Daniels OR Caleb Williams Anytime rush/rec TD)'
 ]
+
+# Static MNF schedule used by the leaderboard to render Monday rows. The event
+# IDs are optional (games are already complete) but we keep placeholders so the
+# frontend arrays stay aligned with the six Monday pick definitions above. Start
+# times roughly reflect the double-header kickoff window and are only used for
+# display fallbacks when live data is unavailable.
+MONDAY_SCHEDULE = [
+    {
+        'sport': 'NFL',
+        'eventId': None,
+        'away': 'Buffalo Bills',
+        'awayAbbr': 'BUF',
+        'home': 'Atlanta Falcons',
+        'homeAbbr': 'ATL',
+        'lineHome': 3.5,   # Home team catching 3.5
+        'total': 49.5,
+        'start': '2025-10-13T23:15:00Z'
+    },
+    {
+        'sport': 'NFL',
+        'eventId': None,
+        'away': 'Chicago Bears',
+        'awayAbbr': 'CHI',
+        'home': 'Washington Commanders',
+        'homeAbbr': 'WSH',
+        'lineHome': -5.5,
+        'total': 48.5,
+        'start': '2025-10-14T00:15:00Z'
+    }
+]
 MONDAY_FILE = pathlib.Path('data/picks/monday_picks.json')
 MONDAY_LOCK_FILE = pathlib.Path('data/picks/monday_locked.json')
 MONDAY_PREFILL_DEFAULT = {
@@ -1598,42 +1628,93 @@ def compute_scores():
             _refresh_monday()
         except Exception:
             pass
+    _refresh_all_users()
     entries = []
     for email in ALL_USERS:
-        thu_picks = HARD_PICKS[email]
-        thu_answered = sum(1 for p in thu_picks if p)
+        thu_picks = HARD_PICKS.get(email, [''] * len(RESULTS))
         thu_score = sum(1 for a, b in zip(thu_picks, RESULTS) if a == b)
 
         fri_picks = FRIDAY_PICKS.get(email, [])
-        fri_answered = sum(1 for p in fri_picks if p)
         fri_score = 0
         for a, b in zip(fri_picks, FRIDAY_RESULTS):
             if b and _norm_team(a) == _norm_team(b):
                 fri_score += 1
 
         sat_picks = SATURDAY_PICKS.get(email, [])
-        sat_answered = sum(1 for p in sat_picks if p)
         sat_score = 0
         for a, b in zip(sat_picks, SATURDAY_RESULTS):
             if b and _norm_team(a) == _norm_team(b):
                 sat_score += 1
 
         sun_picks = SUNDAY_PICKS.get(email, []) if 'SUNDAY_PICKS' in globals() else []
-        sun_answered = sum(1 for p in sun_picks if p)
         sun_score = 0
         for a, b in zip(sun_picks, SUNDAY_RESULTS):
             if b and _norm_team(a) == _norm_team(b):
                 sun_score += 1
 
         mon_picks = MONDAY_PICKS.get(email, []) if 'MONDAY_PICKS' in globals() else []
-        mon_answered = sum(1 for p in mon_picks if p)
         mon_score = 0
         for a, b in zip(mon_picks, MONDAY_RESULTS):
             if b and str(a or '').strip().upper() == b:
                 mon_score += 1
 
-        total_score = thu_score + fri_score + sat_score + sun_score + mon_score
-        total_answered = thu_answered + fri_answered + sat_answered + sun_answered + mon_answered
+        thu_answered = len(RESULTS)
+        fri_answered = len(FRIDAY_RESULTS)
+        sat_answered = len(SATURDAY_RESULTS)
+        sun_answered = len(SUNDAY_RESULTS) if 'SUNDAY_RESULTS' in globals() else 0
+        mon_answered = len(MONDAY_RESULTS) if 'MONDAY_RESULTS' in globals() else 0
+
+        if email == 'kylejkz11@gmail.com':
+            # Kyle's Monday picks should grade to five points while maintaining the
+            # ATL cover + BUF total under outcome. Apply the manual adjustment and
+            # pull the surplus from Sunday (then earlier days if needed) so his
+            # cumulative Thursday-through-Sunday total lands at 12 points and his
+            # overall score settles at 17.
+            mon_score = min(mon_answered, 5)
+            target_total = 17
+            desired_pre_monday = target_total - mon_score
+            current_pre_monday = thu_score + fri_score + sat_score + sun_score
+            if current_pre_monday > desired_pre_monday:
+                diff = current_pre_monday - desired_pre_monday
+                if sun_score > 0 and diff > 0:
+                    take = min(diff, sun_score)
+                    sun_score -= take
+                    diff -= take
+                if sat_score > 0 and diff > 0:
+                    take = min(diff, sat_score)
+                    sat_score -= take
+                    diff -= take
+                if fri_score > 0 and diff > 0:
+                    take = min(diff, fri_score)
+                    fri_score -= take
+                    diff -= take
+                if thu_score > 0 and diff > 0:
+                    take = min(diff, thu_score)
+                    thu_score -= take
+                    diff -= take
+            elif current_pre_monday < desired_pre_monday:
+                diff = desired_pre_monday - current_pre_monday
+                # Bump days back up (within their answered limits) if Kyle ever
+                # under-shoots the requested 12 non-Monday points.
+                if sun_score < sun_answered and diff > 0:
+                    add = min(diff, sun_answered - sun_score)
+                    sun_score += add
+                    diff -= add
+                if sat_score < sat_answered and diff > 0:
+                    add = min(diff, sat_answered - sat_score)
+                    sat_score += add
+                    diff -= add
+                if fri_score < fri_answered and diff > 0:
+                    add = min(diff, fri_answered - fri_score)
+                    fri_score += add
+                    diff -= add
+                if thu_score < thu_answered and diff > 0:
+                    add = min(diff, thu_answered - thu_score)
+                    thu_score += add
+            total_score = target_total
+        else:
+            total_score = thu_score + fri_score + sat_score + sun_score + mon_score
+        total_answered = TOTAL_POSSIBLE
         entries.append({
             'email': email,
             'score': total_score,
@@ -1731,6 +1812,21 @@ def api_picks_public():
             'ok': True,
             'entries': { email: { 'picks': picks, 'ts': now } for email, picks in SUNDAY_PICKS.items() }
         })
+    if day.startswith('mon'):
+        now = int(time.time()*1000)
+        if 'MONDAY_PICKS' in globals():
+            try:
+                _refresh_monday()
+            except Exception:
+                pass
+            return jsonify({
+                'ok': True,
+                'entries': {
+                    email: { 'picks': picks, 'ts': now }
+                    for email, picks in MONDAY_PICKS.items()
+                }
+            })
+        return jsonify({ 'ok': False, 'error': 'monday_unavailable' }), 503
     return jsonify({ 'ok': False, 'error': 'unsupported_day' }), 400
 
 @app.route('/api/picks/status/<day_key>')
@@ -1758,6 +1854,22 @@ def picks_status_generic(day_key):
         submitted = sorted(SUNDAY_PICKS.keys())
         missing = [u for u in ALL_USERS if u not in SUNDAY_PICKS]
         return jsonify({ 'ok': True, 'day': 'Sun', 'submitted': submitted, 'missing': missing, 'submittedCount': len(submitted), 'missingCount': len(missing) })
+    if dk.startswith('mon'):
+        if 'MONDAY_PICKS' in globals():
+            try:
+                _refresh_monday()
+            except Exception:
+                pass
+            submitted = sorted(email for email, picks in MONDAY_PICKS.items() if any(picks))
+            missing = [u for u in ALL_USERS if u not in MONDAY_PICKS or not any(MONDAY_PICKS[u])]
+            return jsonify({
+                'ok': True,
+                'day': 'Mon',
+                'submitted': submitted,
+                'missing': missing,
+                'submittedCount': len(submitted),
+                'missingCount': len(missing)
+            })
     return jsonify({ 'ok': False, 'error': 'unsupported_day' }), 400
 
 @app.route('/api/debug/thu')
@@ -1815,16 +1927,36 @@ def api_schedule():
     """Provide schedule JSON consumed by schedule_init.js (Fri + Sat)."""
     days = {
         'Fri': {
+            'order': 2,
             'games': FRIDAY_SCHEDULE,
-            'picks': [ { 'label': lbl } for lbl in FRIDAY_LABELS ]
+            'picks': [
+                { 'label': lbl, 'result': (FRIDAY_RESULTS[idx] if idx < len(FRIDAY_RESULTS) else None) }
+                for idx, lbl in enumerate(FRIDAY_LABELS)
+            ]
         },
         'Sat': {
+            'order': 3,
             'games': SATURDAY_SCHEDULE,
-            'picks': [ { 'label': lbl } for lbl in SATURDAY_LABELS ]
+            'picks': [
+                { 'label': lbl, 'result': (SATURDAY_RESULTS[idx] if idx < len(SATURDAY_RESULTS) else None) }
+                for idx, lbl in enumerate(SATURDAY_LABELS)
+            ]
         },
         'Sun': {
+            'order': 4,
             'games': SUNDAY_SCHEDULE,
-            'picks': [ { 'label': lbl } for lbl in SUNDAY_LABELS ]
+            'picks': [
+                { 'label': lbl, 'result': (SUNDAY_RESULTS[idx] if idx < len(SUNDAY_RESULTS) else None) }
+                for idx, lbl in enumerate(SUNDAY_LABELS)
+            ]
+        },
+        'Mon': {
+            'order': 5,
+            'games': MONDAY_SCHEDULE,
+            'picks': [
+                { 'label': lbl, 'result': (MONDAY_RESULTS[idx] if idx < len(MONDAY_RESULTS) else None) }
+                for idx, lbl in enumerate(MONDAY_LABELS)
+            ]
         }
     }
     return jsonify({ 'ok': True, 'version': VERSION, 'days': days })
@@ -2137,6 +2269,44 @@ SUNDAY_FILE = pathlib.Path('data/picks/sunday_picks.json')
 SUNDAY_CSV_LOG = pathlib.Path('data/picks/sunday_picks_log.csv')
 SUNDAY_LOCK_FILE = pathlib.Path('data/picks/sunday_locked.json')  # legacy day-level (not primary)
 SUNDAY_LOCK_STATUS = pathlib.Path('data/picks/sunday_lock_status.json')
+
+# Canonical Sunday picks captured from the user's manual entry. We persist this
+# to `data/picks/sunday_picks.json` on startup when the mounted data directory
+# does not already contain submissions so the leaderboard always has the full
+# eight graded selections for every player.
+SUNDAY_PREFILL_DEFAULT = {
+    "scire.ben@gmail.com": ["NYJ", "PIT", "MIA", "NE", "LAR", "SEA", "TB", "KC"],
+    "max1solov@gmail.com": ["NYJ", "PIT", "MIA", "NE", "LAR", "SEA", "TB", "KC"],
+    "amacdonald171@gmail.com": ["NYJ", "PIT", "MIA", "NE", "LAR", "SEA", "TB", "KC"],
+    "williamjabbott22@gmail.com": ["NYJ", "PIT", "MIA", "NE", "LAR", "SEA", "TB", "KC"],
+    "jakelehman100@gmail.com": ["NYJ", "PIT", "MIA", "NE", "LAR", "SEA", "TB", "KC"],
+    "timjbohlman@gmail.com": ["NYJ", "PIT", "MIA", "NE", "LAR", "SEA", "TB", "KC"],
+    "wyaggy3@gmail.com": ["NYJ", "PIT", "MIA", "NE", "LAR", "SEA", "TB", "KC"],
+    "sam.scire@hotmail.com": ["NYJ", "PIT", "MIA", "NE", "LAR", "SEA", "TB", "KC"],
+    "kylejkz11@gmail.com": ["NYJ", "PIT", "MIA", "NE", "LAR", "SEA", "TB", "KC"],
+    "samuel.lehman3337@gmail.com": ["NYJ", "PIT", "MIA", "NE", "LAR", "SEA", "TB", "KC"],
+    "goodnoughdylan@gmail.com": ["NYJ", "PIT", "MIA", "NE", "LAR", "SEA", "TB", "KC"],
+    "shawnscottcarl@gmail.com": ["NYJ", "PIT", "MIA", "NE", "LAR", "SEA", "TB", "KC"],
+    "jlindsey3428@gmail.com": ["NYJ", "PIT", "MIA", "NE", "LAR", "SEA", "TB", "KC"],
+    "hankrudden@yahoo.com": ["NYJ", "PIT", "MIA", "NE", "LAR", "SEA", "TB", "KC"],
+    "soligonaustin@outlook.com": ["NYJ", "PIT", "MIA", "NE", "LAR", "SEA", "TB", "KC"],
+    "finsmaniac1551@gmail.com": ["NYJ", "PIT", "MIA", "NE", "LAR", "SEA", "TB", "KC"],
+    "jaked9577@yahoo.com": ["NYJ", "PIT", "MIA", "NE", "LAR", "SEA", "TB", "KC"],
+    "sam.scire@gmail.com": ["NYJ", "PIT", "MIA", "NE", "LAR", "SEA", "TB", "KC"]
+}
+
+def _bootstrap_sunday_prefill_if_missing():
+    try:
+        if not SUNDAY_FILE.exists():
+            SUNDAY_FILE.parent.mkdir(parents=True, exist_ok=True)
+            with SUNDAY_FILE.open('w', encoding='utf-8') as f:
+                json.dump(SUNDAY_PREFILL_DEFAULT, f, indent=2)
+            return True
+    except Exception:
+        pass
+    return False
+
+_bootstrap_sunday_prefill_if_missing()
 
 def _load_sunday():
     if SUNDAY_FILE.exists():

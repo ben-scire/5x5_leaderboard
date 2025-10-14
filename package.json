@@ -1,11 +1,11 @@
 {
   "name": "leaderboard_site",
   "version": "1.0.0",
-  "description": "This project now supports centralized Sunday pick submission using a small Node/Express server.",
-  "main": "server.js",
+  "description": "Frontend bundle metadata. Flask (server.py) now handles all pick storage.",
+  "main": "server.py",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node server.js"
+    "start": "python server.py"
   },
   "keywords": [],
   "author": "",

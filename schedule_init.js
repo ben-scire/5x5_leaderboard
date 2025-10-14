@@ -48,7 +48,9 @@
         total: g.total,
         start: g.start || g.startTime || ''
       }));
-      const picks = (def.picks||[]).map(p=> p.label);
+      const pickDefs = Array.isArray(def.picks) ? def.picks : [];
+      const picks = pickDefs.map(p=> p && p.label ? p.label : '');
+      const results = pickDefs.map(p=> (p && typeof p.result !== 'undefined') ? p.result : null);
       picksLabels[dayKey] = picks;
 
       // Helper to mutate existing const-declared arrays (defined in config.js) so references elsewhere stay valid.
@@ -82,6 +84,21 @@
       else if(dayKey==='Sun') assignDayArrays('sunday', games);
       else if(dayKey==='Mon') assignDayArrays('monday', games);
       else if(dayKey==='Thu'){ /* Thursday already historical; keep existing config if present */ }
+
+      // If backend provided final results, seed coveredPicks immediately so the
+      // bar chart + picks table award points (crucial for Monday hard-coded data).
+      const hasResults = results.some(r => r != null && r !== '');
+      if(hasResults){
+        if(!Array.isArray(coveredPicks[dayKey])) coveredPicks[dayKey] = [];
+        const arr = coveredPicks[dayKey];
+        const needed = picks.length;
+        while(arr.length < needed) arr.push(null);
+        results.forEach((res, idx)=>{
+          if(res == null || res === '') return;
+          const norm = typeof res === 'string' ? res.trim().toUpperCase() : res;
+          arr[idx] = norm;
+        });
+      }
     }
 
   ['Thu','Fri','Sat','Sun','Mon'].forEach(applyDay);
