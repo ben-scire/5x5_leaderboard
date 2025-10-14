@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Recover/aggregate all pick submissions across all days (Thu–Sun) from every on-disk source.
+"""Recover/aggregate all pick submissions across all days (Thu–Mon) from every on-disk source.
 
 Why: If in-memory state drifted or JSON hot reload missed earlier entries, the CSV logs
 (append-only) are the ground-truth history of submissions. For each day we take the LAST
@@ -18,6 +18,8 @@ Data precedence per day (later sources overwrite earlier):
   Friday:   friday_picks_log.csv  -> friday_locked.json (if exists) -> friday_picks.json
   Saturday: saturday_picks_log.csv -> saturday_locked.json (if exists) -> saturday_picks.json
   Sunday:   sunday_picks_log.csv  -> sunday_locked.json (if exists) -> sunday_picks.json
+    Monday:   All monday_*_log.csv variants (latest per email) -> monday_locked.json (if exists) ->
+                        monday_picks.json and Node-era mondayPicks.json variants
 
 The CSV log is first so that any later lock snapshot or JSON (which might be stale) does NOT erase
 newer log entries. Locked snapshot can override if it contains emails absent from the log.
@@ -36,6 +38,7 @@ THU_LEN = 3   # spread, total, prop
 FRI_LEN = 2
 SAT_LEN = 6
 SUN_LEN = 8
+MON_LEN = 6
 
 # File paths
 THU_JSON = BASE / 'thursday_picks.json'
@@ -48,12 +51,16 @@ SAT_LOCK = BASE / 'saturday_locked.json'
 SUN_JSON = BASE / 'sunday_picks.json'
 SUN_LOG  = BASE / 'sunday_picks_log.csv'
 SUN_LOCK = BASE / 'sunday_locked.json'
+MON_JSON = BASE / 'monday_picks.json'
+MON_LOG  = BASE / 'monday_picks_log.csv'
+MON_LOCK = BASE / 'monday_locked.json'
 
 DayInfo = Tuple[str, int, pathlib.Path, pathlib.Path, pathlib.Path]
 
 FRI_INFO: DayInfo = ('Fri', FRI_LEN, FRI_JSON, FRI_LOG, FRI_LOCK)
 SAT_INFO: DayInfo = ('Sat', SAT_LEN, SAT_JSON, SAT_LOG, SAT_LOCK)
 SUN_INFO: DayInfo = ('Sun', SUN_LEN, SUN_JSON, SUN_LOG, SUN_LOCK)
+MON_INFO: Tuple[int, pathlib.Path, pathlib.Path, pathlib.Path] = (MON_LEN, MON_JSON, MON_LOG, MON_LOCK)
 
 
 def _safe_load_json(path: pathlib.Path):
@@ -123,6 +130,71 @@ def recover_day(name: str, length: int, json_file: pathlib.Path, log_file: pathl
     return recovered
 
 
+def recover_monday() -> Dict[str, List[str]]:
+    """Recover Monday submissions from multiple possible JSON/CSV sources.
+    Precedence:
+      1) CSV logs (latest row per email wins) across known locations
+      2) Locked snapshot (adds missing emails)
+      3) Live JSON (adds missing emails) across known locations
+    """
+    recovered: Dict[str, List[str]] = {}
+    # 1) Accumulate from CSV logs (latest per email; last-seen wins across files)
+    alt_logs = [
+        MON_LOG,
+        pathlib.Path('data/monday_picks_log.csv'),
+        pathlib.Path('data/mondayPicks_log.csv'),
+        pathlib.Path('data/picks/monday_picks_log.csv'),
+        pathlib.Path('data/picks/mondayPicks_log.csv'),
+        pathlib.Path('recovered/monday_picks_log.csv'),
+        pathlib.Path('recovered/mondayPicks_log.csv'),
+    ]
+    for lp in alt_logs:
+        latest = _latest_from_log(lp, MON_LEN)
+        if latest:
+            for k, v in latest.items():
+                recovered[k] = v
+
+    # 2) Locked snapshot can add missing emails
+    lock_paths = [
+        MON_LOCK,
+        pathlib.Path('data/monday_locked.json'),
+        pathlib.Path('data/picks/monday_locked.json'),
+        pathlib.Path('recovered/monday_locked.json'),
+    ]
+    for lk in lock_paths:
+        lock_data = _safe_load_json(lk)
+        if isinstance(lock_data, dict):
+            picks_map = lock_data.get('picks') if isinstance(lock_data.get('picks'), dict) else lock_data
+            if isinstance(picks_map, dict):
+                for email, picks in picks_map.items():
+                    if email not in recovered:
+                        recovered[email] = _normalize_list(picks, MON_LEN)
+
+    # 3) JSON files can add missing emails
+    alt_jsons = [
+        MON_JSON,
+        pathlib.Path('data/mondayPicks.json'),
+        pathlib.Path('data/monday_picks.json'),
+        pathlib.Path('data/MondayPicks.json'),
+        pathlib.Path('data/picks/mondayPicks.json'),
+        pathlib.Path('data/picks/MondayPicks.json'),
+        pathlib.Path('recovered/mondayPicks.json'),
+        pathlib.Path('recovered/monday_picks.json'),
+    ]
+    for jp in alt_jsons:
+        j = _safe_load_json(jp)
+        if isinstance(j, dict):
+            # Accept either { email: [..] } or { email: { picks:[..] } }
+            for email, val in j.items():
+                if email in recovered:
+                    continue
+                if isinstance(val, list):
+                    recovered[email] = _normalize_list(val, MON_LEN)
+                elif isinstance(val, dict) and isinstance(val.get('picks'), list):
+                    recovered[email] = _normalize_list(val['picks'], MON_LEN)
+    return recovered
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--out', help='Write aggregated JSON to this path')
@@ -144,9 +216,11 @@ def main():
     result['Fri'] = recover_day(*FRI_INFO)
     result['Sat'] = recover_day(*SAT_INFO)
     result['Sun'] = recover_day(*SUN_INFO)
+    # Monday via multi-source recovery
+    result['Mon'] = recover_monday()
 
     # Build union of emails
-    all_emails = set(result['Thu'].keys()) | set(result['Fri'].keys()) | set(result['Sat'].keys()) | set(result['Sun'].keys())
+    all_emails = set(result['Thu'].keys()) | set(result['Fri'].keys()) | set(result['Sat'].keys()) | set(result['Sun'].keys()) | set(result['Mon'].keys())
 
     # Optionally filter out blank-only rows per day for CSV output
     def non_blank(picks: List[str]) -> bool:
@@ -177,8 +251,8 @@ def main():
                 writer = csv.writer(f)
                 # Determine max picks length across days for uniformity (or just use per-day variable sets)
                 writer.writerow(['day','email','pick_index','pick'])
-                for day in ['Thu','Fri','Sat','Sun']:
-                    length = { 'Thu': THU_LEN, 'Fri': FRI_LEN, 'Sat': SAT_LEN, 'Sun': SUN_LEN }[day]
+                for day in ['Thu','Fri','Sat','Sun','Mon']:
+                    length = { 'Thu': THU_LEN, 'Fri': FRI_LEN, 'Sat': SAT_LEN, 'Sun': SUN_LEN, 'Mon': MON_LEN }[day]
                     day_map = result[day]
                     for email, picks in sorted(day_map.items()):
                         if not args.include_empty and not non_blank(picks):
