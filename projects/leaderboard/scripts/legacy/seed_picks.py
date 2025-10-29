@@ -15,10 +15,10 @@ from __future__ import annotations
 import json, time, argparse
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[2]
 DATA = ROOT / 'data'
 PICKS_FILE = DATA / 'picks.json'
-SERVER_FILE = ROOT / 'server.py'
+SERVER_FILE = ROOT / 'backend/app.py'
 
 def extract_all_users() -> list[str]:
     # Minimal parse of PHRASE_MAP or ALL_USERS from server.py without importing (avoids side effects)

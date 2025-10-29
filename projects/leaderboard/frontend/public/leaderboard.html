@@ -7,21 +7,21 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="leaderboard.css?v=11">
+  <link rel="stylesheet" href="/static/css/leaderboard.css?v=11">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
   <!-- Styles moved to external stylesheet: leaderboard.css -->
 </head>
 <body>
   <div class="app-frame">
   <div style="margin:18px 0 18px 0;text-align:center;">
-    <a href="submit_mon.html" style="display:inline-block;background:#233345;color:#90caf9;font-weight:600;padding:12px 28px;border-radius:8px;font-size:16px;text-decoration:none;border:1px solid #35526b;transition:background .15s;">Go to Monday Submission Page</a>
+    <a href="/submit_mon.html" style="display:inline-block;background:#233345;color:#90caf9;font-weight:600;padding:12px 28px;border-radius:8px;font-size:16px;text-decoration:none;border:1px solid #35526b;transition:background .15s;">Go to Monday Submission Page</a>
   </div>
   <script>window.SATURDAY_PUBLIC = true; /* Force full Saturday picks visibility */</script>
   <div class="site-header">
     <div class="header-inner">
   <div class="site-title">5x5 Pick 'em – New Week</div>
   <div class="subtitle">Coach H&amp;Jake Coaching Co. and TS^2G</div>
-  <img src="SSG-white.png" alt="The Scire Scoring Group Logo" class="tsg-logo" onerror="this.removeAttribute('onerror');this.style.opacity='0';setTimeout(()=>{this.src='SSG-white.png';this.style.opacity='1';},300);" />
+  <img src="/static/img/SSG-white.png" alt="The Scire Scoring Group Logo" class="tsg-logo" onerror="this.removeAttribute('onerror');this.style.opacity='0';setTimeout(()=>{this.src='/static/img/SSG-white.png';this.style.opacity='1';},300);" />
     </div>
   </div>
   <div class="header-divider"></div>
@@ -74,14 +74,14 @@
   </div><!-- /.app-frame -->
   <!-- MNF submission section removed (now fully locked and displayed via CSV) -->
   <!-- External scripts loaded at end for clarity (defer not required here) -->
-  <script src="config.js?v=14"></script>
+  <script src="/static/js/config.js?v=14"></script>
   <!-- Load dynamic schedule mapper BEFORE legacy leaderboard.js so globals populate -->
-  <script src="schedule_init.js?v=14"></script>
-  <script src="leaderboard.js?v=15"></script>
+  <script src="/static/js/schedule_init.js?v=14"></script>
+  <script src="/static/js/leaderboard.js?v=15"></script>
   <!-- Fallback Saturday scoreboard hydration helper -->
-  <script src="scoreboard_fix.js?v=14"></script>
+  <script src="/static/js/scoreboard_fix.js?v=14"></script>
   <!-- Dynamic live integration (backend-driven). Falls back silently if APIs missing -->
-  <script src="leaderboard_live.js?v=14"></script>
+  <script src="/static/js/leaderboard_live.js?v=14"></script>
   <!-- monday_submit.js removed -->
 </body>
 </html>
