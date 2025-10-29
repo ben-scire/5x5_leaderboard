@@ -31,7 +31,9 @@ from __future__ import annotations
 import argparse, csv, json, pathlib, sys
 from typing import Dict, List, Tuple
 
-BASE = pathlib.Path('data/picks')
+PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[2]
+DATA_DIR = PROJECT_ROOT / 'data'
+BASE = DATA_DIR / 'picks'
 
 # Label counts (mirrors server expectations). Adjust if schedule changes.
 THU_LEN = 3   # spread, total, prop

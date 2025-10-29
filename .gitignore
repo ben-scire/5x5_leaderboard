@@ -1,16 +1,33 @@
-node_modules/
-venv/
-*.pyc
+# Python cache
 __pycache__/
-backups/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Node artifacts (legacy front-end tooling)
+node_modules/
+
+# Build outputs
+build/
+dist/
+*.egg-info/
+
+# Logs & editor clutter
 *.log
-data/*.tmp
-old_weeks_data/
+*.tmp
 *.DS_Store
-archive/old_weeks_data/data/*.json
-archive/old_weeks_data/data/snapshots/
-archive/legacy_forms/
-archive/**/*.tmp
-/*.csv
-!5x5_leaderboard/data/week_schedule.csv
-!5x5_leaderboard/Week_Schedule_Final.csv
+
+# Legacy archive folders
+archive/
+backups/
+old_weeks_data/
+
+# Local data snapshots that should not leak into commits
+projects/leaderboard/data/**/*.bak
+projects/leaderboard/data/**/*.tmp

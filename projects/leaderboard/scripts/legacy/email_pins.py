@@ -21,8 +21,10 @@ import os, sys, argparse, json, smtplib, time
 from email.message import EmailMessage
 from pathlib import Path
 
-PINS_PATH = Path('data/picks/pins.json')
-SENT_LOG_PATH = Path('data/picks/pins_sent_log.json')  # records email -> { pin, firstSent, lastSent, count }
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+DATA_DIR = PROJECT_ROOT / 'data'
+PINS_PATH = DATA_DIR / 'picks' / 'pins.json'
+SENT_LOG_PATH = DATA_DIR / 'picks' / 'pins_sent_log.json'  # records email -> { pin, firstSent, lastSent, count }
 
 SUBJECT = "Your 5x5 Saturday Pick Submission PIN"
 BODY_TEMPLATE = (

@@ -2,12 +2,18 @@ import pathlib
 import json, os, time, csv, datetime
 from flask import Flask, jsonify, send_from_directory, request
 
+BASE_DIR = pathlib.Path(__file__).resolve().parent.parent
+FRONTEND_DIR = BASE_DIR / 'frontend'
+PUBLIC_DIR = FRONTEND_DIR / 'public'
+STATIC_DIR = FRONTEND_DIR / 'static'
+DATA_DIR = BASE_DIR / 'data'
+
 VERSION = 'week-multi-24'  # Fix Sunday ordering: restore NE before LAR to match stored user picks
 # Always treat Saturday JSON snapshot as authoritative; ignore CSV log auto-rebuilds.
 FORCE_SATURDAY_JSON = True  # previously env-driven; now permanently enabled
 RUNTIME_FORCE_SATURDAY_JSON = True  # runtime flag also locked on so reload logic always prefers JSON
 
-app = Flask(__name__, static_folder='.', static_url_path='')
+app = Flask(__name__, static_folder=str(STATIC_DIR), static_url_path='/static')
 ## ...existing code... (Flask import and app creation now at top)
 MONDAY_LABELS = [
     'NFL: BUF -3.5 @ ATL (Spread)',
@@ -57,8 +63,8 @@ MONDAY_SCHEDULE = [
 # times roughly reflect the double-header kickoff window and are only used for
 # display fallbacks when live data is unavailable.
 
-MONDAY_FILE = pathlib.Path('data/picks/monday_picks.json')
-MONDAY_LOCK_FILE = pathlib.Path('data/picks/monday_locked.json')
+MONDAY_FILE = DATA_DIR / 'picks' / 'monday_picks.json'
+MONDAY_LOCK_FILE = DATA_DIR / 'picks' / 'monday_locked.json'
 MONDAY_PREFILL_DEFAULT = {
     "kylejkz11@gmail.com": ["BUF", "UNDER", "YES", "CHI", "OVER", "YES"],
     "max1solov@gmail.com": ["BUF", "OVER", "YES", "WSH", "OVER", "NO"],
@@ -218,7 +224,7 @@ SUNDAY_RESULTS = [
     'KC'    # Game 7 DET @ KC (final)
 ]
 # Authoritative Thursday picks now fully external in data/picks/thursday_picks.json (no embedded fallback)
-DATA_OVERRIDE_PATH = pathlib.Path('data/picks/thursday_picks.json')
+DATA_OVERRIDE_PATH = DATA_DIR / 'picks' / 'thursday_picks.json'
 def _load_thursday():
     try:
         if DATA_OVERRIDE_PATH.exists():
@@ -280,9 +286,9 @@ def _refresh_all_users():
     ALL_USERS = _aggregate_all_users()
 
 # ---- PIN system (simple 4-digit per email) ----
-PINS_FILE = pathlib.Path('data/picks/pins.json')
-ALLOWED_EMAILS_FILE = pathlib.Path('data/allowed_emails.json')
-ACTIVE_EMAILS_FILE = pathlib.Path('data/active_emails.json')  # optional narrower roster for this week
+PINS_FILE = DATA_DIR / 'picks' / 'pins.json'
+ALLOWED_EMAILS_FILE = DATA_DIR / 'allowed_emails.json'
+ACTIVE_EMAILS_FILE = DATA_DIR / 'active_emails.json'  # optional narrower roster for this week
 
 def _load_allowed_emails():
     """Union of Thursday core users + allowed_emails.json; optionally narrowed by active_emails.json."""
@@ -362,11 +368,11 @@ TOTAL_POSSIBLE = len(RESULTS) + len(FRIDAY_RESULTS) + len(SATURDAY_RESULTS) + le
 
 
 # --- Simple persistent storage for Friday picks (new feature) ---
-FRIDAY_FILE = pathlib.Path('data/picks/friday_picks.json')
-FRIDAY_CSV_LOG = pathlib.Path('data/picks/friday_picks_log.csv')
-FRIDAY_LOCK_FILE = pathlib.Path('data/picks/friday_locked.json')
-FRIDAY_LOCK_STATUS = pathlib.Path('data/picks/friday_lock_status.json')
-FRIDAY_SEED_CSV = pathlib.Path('data/picks/Fri_Picks.csv')  # new: seed file provided by user
+FRIDAY_FILE = DATA_DIR / 'picks' / 'friday_picks.json'
+FRIDAY_CSV_LOG = DATA_DIR / 'picks' / 'friday_picks_log.csv'
+FRIDAY_LOCK_FILE = DATA_DIR / 'picks' / 'friday_locked.json'
+FRIDAY_LOCK_STATUS = DATA_DIR / 'picks' / 'friday_lock_status.json'
+FRIDAY_SEED_CSV = DATA_DIR / 'picks' / 'Fri_Picks.csv'  # new: seed file provided by user
 FRIDAY_LABELS = [
     'NCAAF: USF +1.5 @ UNT (pick team)',
     'NCAAF: Rutgers +10.5 @ WASH (pick team)'
@@ -420,9 +426,9 @@ SATURDAY_SCHEDULE = [
 ]
 
 # Saturday storage paths
-SATURDAY_FILE = pathlib.Path('data/picks/saturday_picks.json')  # Saturday storage paths (JSON snapshot is the ONLY authoritative source now)
-SATURDAY_LOCK_FILE = pathlib.Path('data/picks/saturday_locked.json')
-SATURDAY_LOCK_STATUS = pathlib.Path('data/picks/saturday_lock_status.json')
+SATURDAY_FILE = DATA_DIR / 'picks' / 'saturday_picks.json'  # Saturday storage paths (JSON snapshot is the ONLY authoritative source now)
+SATURDAY_LOCK_FILE = DATA_DIR / 'picks' / 'saturday_locked.json'
+SATURDAY_LOCK_STATUS = DATA_DIR / 'picks' / 'saturday_lock_status.json'
 
 def _load_saturday():
     if SATURDAY_FILE.exists():
@@ -655,7 +661,7 @@ def _repair_saturday_from_file():
 # A game is considered locked if either (a) it has been manually locked by the admin
 # or (b) the current time is past (>=) the scheduled kickoff time. Manual unlocks
 # cannot override kickoff-based automatic locks.
-SATURDAY_GAME_LOCKS_FILE = pathlib.Path('data/picks/saturday_game_locks.json')
+SATURDAY_GAME_LOCKS_FILE = DATA_DIR / 'picks' / 'saturday_game_locks.json'
 
 def _load_saturday_game_locks():
     if SATURDAY_GAME_LOCKS_FILE.exists():
@@ -1785,10 +1791,10 @@ SUNDAY_SCHEDULE = [
 ]
 
 # Sunday storage
-SUNDAY_FILE = pathlib.Path('data/picks/sunday_picks.json')
-SUNDAY_CSV_LOG = pathlib.Path('data/picks/sunday_picks_log.csv')
-SUNDAY_LOCK_FILE = pathlib.Path('data/picks/sunday_locked.json')  # legacy day-level (not primary)
-SUNDAY_LOCK_STATUS = pathlib.Path('data/picks/sunday_lock_status.json')
+SUNDAY_FILE = DATA_DIR / 'picks' / 'sunday_picks.json'
+SUNDAY_CSV_LOG = DATA_DIR / 'picks' / 'sunday_picks_log.csv'
+SUNDAY_LOCK_FILE = DATA_DIR / 'picks' / 'sunday_locked.json'  # legacy day-level (not primary)
+SUNDAY_LOCK_STATUS = DATA_DIR / 'picks' / 'sunday_lock_status.json'
 
 # Canonical Sunday picks captured from the user's manual entry. We persist this
 # to `data/picks/sunday_picks.json` on startup when the mounted data directory
@@ -1887,7 +1893,7 @@ SUNDAY_PICKS = _load_sunday()
 # We store per-email boolean list (same length as SUNDAY_LABELS) where True indicates the pick
 # currently present was inserted automatically (e.g., NYJ backfill) *and has not yet been
 # explicitly submitted/overwritten by the user via /api/picks/sunday/submit*.
-SUNDAY_AUTOFILL_META_FILE = pathlib.Path('data/picks/sunday_autofill_meta.json')
+SUNDAY_AUTOFILL_META_FILE = DATA_DIR / 'picks' / 'sunday_autofill_meta.json'
 def _load_sunday_autofill_meta():
     if SUNDAY_AUTOFILL_META_FILE.exists():
         try:
@@ -1972,7 +1978,7 @@ def _maybe_reload_sunday():
     return False
 
 # Per-game locks Sunday (same semantics as Saturday)
-SUNDAY_GAME_LOCKS_FILE = pathlib.Path('data/picks/sunday_game_locks.json')
+SUNDAY_GAME_LOCKS_FILE = DATA_DIR / 'picks' / 'sunday_game_locks.json'
 
 def _load_sunday_game_locks():
     if SUNDAY_GAME_LOCKS_FILE.exists():
@@ -2210,15 +2216,28 @@ def saturday_unlock_game():
 
 @app.route('/')
 def root():
-    return send_from_directory('.', 'leaderboard.html')
+    return send_from_directory(str(PUBLIC_DIR), 'leaderboard.html')
 
 @app.route('/leaderboard.html')
 def leaderboard_page():
-    return send_from_directory('.', 'leaderboard.html')
+    return send_from_directory(str(PUBLIC_DIR), 'leaderboard.html')
 
 @app.route('/picks.html')
 def picks_page():
-    return send_from_directory('.', 'picks.html')
+    return send_from_directory(str(PUBLIC_DIR), 'picks.html')
+
+@app.route('/<path:page>')
+def additional_pages(page: str):
+    if page.startswith('api/'):
+        return jsonify({ 'ok': False, 'error': 'not_found' }), 404
+    target = (PUBLIC_DIR / page).resolve()
+    try:
+        target.relative_to(PUBLIC_DIR)
+    except ValueError:
+        return jsonify({ 'ok': False, 'error': 'not_found' }), 404
+    if not target.exists() or target.suffix.lower() != '.html':
+        return jsonify({ 'ok': False, 'error': 'not_found' }), 404
+    return send_from_directory(str(PUBLIC_DIR), page)
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', '8000'))
