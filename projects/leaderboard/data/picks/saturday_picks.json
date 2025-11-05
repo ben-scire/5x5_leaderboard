@@ -1,19 +1,138 @@
 {
-  "scire.ben@gmail.com": ["ILLINOIS", "ALABAMA", "OREGON", "TEXAS", "UGA", "BYU"],
-  "max1solov@gmail.com": ["OHIO STATE", "MIZZOU", "INDIANA", "OKLAHOMA", "UGA", "ARIZONA"],
-  "amacdonald171@gmail.com": ["ILLINOIS", "ALABAMA", "INDIANA", "TEXAS", "UGA", "BYU"],
-  "williamjabbott22@gmail.com": ["OHIO STATE", "ALABAMA", "INDIANA", "OKLAHOMA", "UGA", "BYU"],
-  "jakelehman100@gmail.com": ["ILLINOIS", "ALABAMA", "OREGON", "OKLAHOMA", "AUBURN", "ARIZONA"],
-  "timjbohlman@gmail.com": ["OHIO STATE", "MIZZOU", "INDIANA", "OKLAHOMA", "AUBURN", "BYU"],
-  "wyaggy3@gmail.com": ["OHIO STATE", "ALABAMA", "OREGON", "OKLAHOMA", "AUBURN", "ARIZONA"],
-  "sam.scire@hotmail.com": ["OHIO STATE", "ALABAMA", "INDIANA", "TEXAS", "UGA", "BYU"],
-  "kylejkz11@gmail.com": ["OHIO STATE", "MIZZOU", "OREGON", "OKLAHOMA", "AUBURN", "ARIZONA"],
-  "samuel.lehman3337@gmail.com": ["ILLINOIS", "MISSOURI", "INDIANA", "TEXAS", "AUBURN", "BYU"],
-  "goodnoughdylan@gmail.com": ["OHIO STATE", "MIZZOU", "OREGON", "TEXAS", "AUBURN", "BYU"],
-  "shawnscottcarl@gmail.com": ["OHIO STATE", "ALABAMA", "OREGON", "OKLAHOMA", "AUBURN", "BYU"],
-  "jlindsey3428@gmail.com": ["ILLINOIS", "ALABAMA", "OREGON", "OKLAHOMA", "AUBURN", "BYU"],
-  "hankrudden@yahoo.com": ["ILLINOIS", "ALABAMA", "OREGON", "TEXAS", "AUBURN", "ARIZONA"],
-  "soligonaustin@outlook.com": ["ILLINOIS", "ALABAMA", "OREGON", "OKLAHOMA", "UGA", "ARIZONA"],
-  "finsmaniac1551@gmail.com": ["OHIO STATE", "ALABAMA", "OREGON", "TEXAS", "AUBURN", "ARIZONA"],
-  "jaked9577@yahoo.com": ["ILLINOIS", "ALABAMA", "OREGON", "OKLAHOMA", "AUBURN", "ARIZONA"]
+  "scire.ben@gmail.com": [
+    "ILLINOIS",
+    "ALABAMA",
+    "OREGON",
+    "TEXAS",
+    "UGA",
+    "BYU"
+  ],
+  "max1solov@gmail.com": [
+    "OHIO STATE",
+    "MIZZOU",
+    "INDIANA",
+    "OKLAHOMA",
+    "UGA",
+    "ARIZONA"
+  ],
+  "amacdonald171@gmail.com": [
+    "ILLINOIS",
+    "ALABAMA",
+    "INDIANA",
+    "TEXAS",
+    "UGA",
+    "BYU"
+  ],
+  "williamjabbott22@gmail.com": [
+    "OHIO STATE",
+    "ALABAMA",
+    "INDIANA",
+    "OKLAHOMA",
+    "UGA",
+    "BYU"
+  ],
+  "jakelehman100@gmail.com": [
+    "ILLINOIS",
+    "ALABAMA",
+    "OREGON",
+    "OKLAHOMA",
+    "AUBURN",
+    "ARIZONA"
+  ],
+  "timjbohlman@gmail.com": [
+    "OHIO STATE",
+    "MIZZOU",
+    "INDIANA",
+    "OKLAHOMA",
+    "AUBURN",
+    "BYU"
+  ],
+  "wyaggy3@gmail.com": [
+    "OHIO STATE",
+    "ALABAMA",
+    "OREGON",
+    "OKLAHOMA",
+    "AUBURN",
+    "ARIZONA"
+  ],
+  "sam.scire@hotmail.com": [
+    "OHIO STATE",
+    "ALABAMA",
+    "INDIANA",
+    "TEXAS",
+    "UGA",
+    "BYU"
+  ],
+  "kylejkz11@gmail.com": [
+    "OHIO STATE",
+    "MIZZOU",
+    "OREGON",
+    "OKLAHOMA",
+    "AUBURN",
+    "ARIZONA"
+  ],
+  "samuel.lehman3337@gmail.com": [
+    "ILLINOIS",
+    "MISSOURI",
+    "INDIANA",
+    "TEXAS",
+    "AUBURN",
+    "BYU"
+  ],
+  "goodnoughdylan@gmail.com": [
+    "OHIO STATE",
+    "MIZZOU",
+    "OREGON",
+    "TEXAS",
+    "AUBURN",
+    "BYU"
+  ],
+  "shawnscottcarl@gmail.com": [
+    "OHIO STATE",
+    "ALABAMA",
+    "OREGON",
+    "OKLAHOMA",
+    "AUBURN",
+    "BYU"
+  ],
+  "jlindsey3428@gmail.com": [
+    "ILLINOIS",
+    "ALABAMA",
+    "OREGON",
+    "OKLAHOMA",
+    "AUBURN",
+    "BYU"
+  ],
+  "hankrudden@yahoo.com": [
+    "ILLINOIS",
+    "ALABAMA",
+    "OREGON",
+    "TEXAS",
+    "AUBURN",
+    "ARIZONA"
+  ],
+  "soligonaustin@outlook.com": [
+    "ILLINOIS",
+    "ALABAMA",
+    "OREGON",
+    "OKLAHOMA",
+    "UGA",
+    "ARIZONA"
+  ],
+  "finsmaniac1551@gmail.com": [
+    "OHIO STATE",
+    "ALABAMA",
+    "OREGON",
+    "TEXAS",
+    "AUBURN",
+    "ARIZONA"
+  ],
+  "jaked9577@yahoo.com": [
+    "ILLINOIS",
+    "ALABAMA",
+    "OREGON",
+    "OKLAHOMA",
+    "AUBURN",
+    "ARIZONA"
+  ]
 }
